@@ -12,17 +12,16 @@
 
 One sentence that captures the feeling the tracker should leave you with.
 
-`<TODO>`
+Informed but calm understanding what needs to be prioritised whilst still be a supportive tool for a second screen.
 
 Two or three references that capture the vibe (links to dribbble shots, screenshots of apps you admire, Pinterest boards — anything visual):
 
-- `<TODO>`
-- `<TODO>`
-- `<TODO>`
+- twine.net colour scheme is visually appealing to a technical audience.
 
 Anti-references — what we are explicitly **not** trying to look like:
 
-- `<TODO>`
+- Busy, saturated dashboards where every element is loud, so the one urgent thing gets lost.
+- Dark "hacker" themes with grey on black text, which is hard to read over a long session.
 
 ## 2. Color palette
 
@@ -32,36 +31,37 @@ These are the colors the build milestones will reference. Once chosen, paste the
 
 | Token | Hex | Where it shows up |
 |---|---|---|
-| `brand-primary` | `<TODO>` | Header, "+" button, focus rings |
-| `brand-accent` | `<TODO>` | Highlights, hover states, links |
-| `surface-page` | `<TODO>` | Page background |
-| `surface-card` | `<TODO>` | Card background |
-| `text-primary` | `<TODO>` | Body text |
-| `text-muted` | `<TODO>` | Captions, dates, counts |
+| `brand-primary` | `#0777da` | Header, "+" button, focus rings |
+| `brand-accent` | `#0b5cad` | Highlights, hover states, links |
+| `surface-page` | `#f8f4ee` | Page background |
+| `surface-card` | `#ffffff` | Card background |
+| `text-primary` | `#04121f` | Body text |
+| `text-muted` | `#5a5758` | Captions, dates, counts |
+| `border-subtle` | `#ece7df` | Card and input borders |
 
 ### Task type (M6 `tag-style`)
 
 | Token | Hex | When used |
 |---|---|---|
-| `type-feature` | `<TODO>` | Cards tagged `feature` (accent stripe + icon) |
-| `type-bug` | `<TODO>` | Cards tagged `bug` (accent stripe + icon) |
+| `type-feature` | `#5b4bb5` | Cards tagged `feature` (accent stripe + icon) |
+| `type-bug` | `#b42318` | Cards tagged `bug` (accent stripe + icon) |
 
 ### Due-date states (M8 `due-tint`)
 
-| Token | Hex | When used |
-|---|---|---|
-| `due-safe` | `<TODO>` | More than 2 days out |
-| `due-warning` | `<TODO>` | Less than 24 hours |
-| `due-overdue` | `<TODO>` | Past due |
-| `due-neutral` | `<TODO>` | Done (overrides date) |
+| Token | Hex | Ink token | Ink hex | When used |
+|---|---|---|---|---|
+| `due-safe` | `#def4e7` | `due-safe-ink` | `#177a4c` | More than 2 days out |
+| `due-warning` | `#fdefd0` | `due-warning-ink` | `#8a5a00` | Less than 24 hours |
+| `due-overdue` | `#fde3e0` | `due-overdue-ink` | `#b42318` | Past due |
+| `due-neutral` | `#ece7df` | `due-neutral-ink` | `#5a5758` | Done (overrides date) |
 
 ## 3. Typography
 
 | Role | Font | Why |
 |---|---|---|
-| Heading | `<TODO>` | `<TODO one sentence>` |
-| Body | `<TODO>` | `<TODO one sentence>` |
-| Monospace (tags, badges, code) | `<TODO>` | `<TODO one sentence>` |
+| Heading | Plus Jakarta Sans (semibold) | Open letter shapes and a tall x-height keep headings readable at a glance on a second screen, and semibold gives clear hierarchy without big size jumps. |
+| Body | Plus Jakarta Sans (regular) | Using one family for headings and body means one font to load and a consistent reading rhythm, and its distinct letters stay legible at 14 px for low vision and dyslexic readers. |
+| Monospace (tags, badges, code) | JetBrains Mono | It clearly separates look-alike characters such as 0/O and 1/l/I, so tags and copied prompt context cannot be misread. |
 
 Suggested sizes (override only if the design demands it):
 
@@ -75,11 +75,11 @@ Suggested sizes (override only if the design demands it):
 
 One short sentence per element. These set the tone for the build phase — Person A's modal and Person B's anchor board should both feel like they came from this doc.
 
-- **Cards:** `<TODO>` (e.g. "Light, almost weightless; the only weight is from a 1px border, no shadow except on hover.")
-- **Buttons:** `<TODO>` (e.g. "Solid fill, no gradient, generous padding, rounded-md.")
-- **Modal:** `<TODO>` (e.g. "Centered, max-width-md, slate-900 backdrop at 50% opacity.")
-- **Empty states:** `<TODO>` (e.g. "Dashed border, muted text, never sad.")
-- **Drag affordance (if used):** `<TODO>` (e.g. "None — we use a status dropdown.")
+- **Cards:** White `surface-card` on the warm `surface-page` with a 1px border so the edge is visible without relying on shadow, and the due-date tint always comes with a text label ("Overdue", "Due today") so state is never shown by colour alone.
+- **Buttons:** Solid `brand-primary` with white text (4.51:1, passes WCAG AA), rounded-md, at least 44 px tall for an easy target, with a visible focus ring for keyboard users.
+- **Modal:** Centred, max-w-md, `text-primary` backdrop at 50% opacity, focus moves into the modal when it opens and Escape closes it, so keyboard and screen reader users are never trapped.
+- **Empty states:** Dashed border with one short plain sentence, so an empty column is explained in words rather than just looking blank.
+- **Drag affordance (if used):** None. We use a status dropdown, which works with a keyboard and screen readers where drag and drop often does not.
 
 ## 5. Voice / microcopy
 
@@ -87,18 +87,18 @@ Three lines of microcopy that capture the tone of the product. Keep it short —
 
 | Where | Text |
 |---|---|
-| "+" button label | `<TODO>` (e.g. "+ Task" or "Add task" or "New") |
-| Empty column placeholder | `<TODO>` (e.g. "Nothing here yet — keep going.") |
-| Toast after "Copy as Prompt Context" | `<TODO>` (e.g. "Copied. Now paste it into the AI.") |
-| Confirm-delete message | `<TODO>` (e.g. "Delete this task? You can't undo.") |
-| Handoff toast (M7 `task-owner`) | `<TODO>` (e.g. "Handed off to {name}. They've got it.") |
+| "+" button label | + Add task |
+| Empty column placeholder | Nothing here yet. |
+| Toast after "Copy as Prompt Context" | Copied. Paste it into your AI tool. |
+| Confirm-delete message | Delete this task? This cannot be undone. |
+| Handoff toast (M7 `task-owner`) | Handed off to {name}. |
 
 ## 6. Logo / wordmark
 
 The tracker probably doesn't need a logo, but it does need a name and a wordmark style.
 
-- **Product name:** `<TODO>` (match PRD §11 team identity)
-- **Wordmark style:** `<TODO>` (e.g. "Just the name in the heading font, brand-primary color, no icon.")
+- **Product name:** Vibecoding Project Tracker
+- **Wordmark style:** Just the name in Plus Jakarta Sans semibold at 24 px in `brand-primary`, no icon. At that size it counts as large text, so its 4.11:1 on `surface-page` passes WCAG AA.
 
 ## 7. Out of scope (this hackathon)
 

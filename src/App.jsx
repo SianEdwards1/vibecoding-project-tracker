@@ -97,6 +97,9 @@ export default function App() {
         </div>
       </header>
 
+      {/* THROWAWAY M3 swatches: delete this line and the TokenSwatches function at the bottom of the file */}
+      <TokenSwatches />
+
       {/* TODO M11 anchors: render the Anchor Board (Presentation / Demo / Report / Documentation) above the board. */}
 
       {/*
@@ -113,5 +116,52 @@ export default function App() {
         Build the four-column board here · M4
       </main>
     </div>
+  );
+}
+
+// THROWAWAY M3: one swatch per DESIGN.md token so you can see them.
+// Delete this whole function (and <TokenSwatches /> above) once you've checked them.
+function TokenSwatches() {
+  const swatches = [
+    ['brand-primary', 'bg-brand-primary'],
+    ['brand-accent', 'bg-brand-accent'],
+    ['surface-page', 'bg-surface-page'],
+    ['surface-card', 'bg-surface-card'],
+    ['text-primary', 'bg-text-primary'],
+    ['text-muted', 'bg-text-muted'],
+    ['border-subtle', 'bg-border-subtle'],
+    ['type-feature', 'bg-type-feature'],
+    ['type-bug', 'bg-type-bug'],
+    ['due-safe', 'bg-due-safe'],
+    ['due-warning', 'bg-due-warning'],
+    ['due-overdue', 'bg-due-overdue'],
+    ['due-neutral', 'bg-due-neutral'],
+    ['due-safe-ink', 'bg-due-safe-ink'],
+    ['due-warning-ink', 'bg-due-warning-ink'],
+    ['due-overdue-ink', 'bg-due-overdue-ink'],
+    ['due-neutral-ink', 'bg-due-neutral-ink'],
+  ];
+  return (
+    <section className="mb-6 rounded-md border border-border-subtle bg-surface-card p-4">
+      <h2 className="mb-3 text-base font-semibold uppercase">Design tokens (test)</h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {swatches.map(([name, bg]) => (
+          <div key={name} className="rounded-md border border-border-subtle">
+            <div className={`h-12 rounded-t-md ${bg}`} />
+            <p className="p-2 font-mono text-xs">{name}</p>
+          </div>
+        ))}
+      </div>
+      <h3 className="mb-2 mt-4 text-sm font-semibold">Due tints with their ink colour</h3>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <p className="rounded-md bg-due-safe p-3 text-sm text-due-safe-ink">Due in 5 days</p>
+        <p className="rounded-md bg-due-warning p-3 text-sm text-due-warning-ink">Due today</p>
+        <p className="rounded-md bg-due-overdue p-3 text-sm text-due-overdue-ink">Overdue</p>
+        <p className="rounded-md bg-due-neutral p-3 text-sm text-due-neutral-ink">Done</p>
+      </div>
+      <p className="mt-4 text-sm">
+        Body text in Plus Jakarta Sans. <span className="font-mono">mono: 0O 1lI</span>
+      </p>
+    </section>
   );
 }
