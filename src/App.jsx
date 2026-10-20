@@ -42,9 +42,71 @@ export const STAGES = [
   { id: 'done',        label: 'Done' },
 ];
 
-// Replace these placeholders with the three names from PRD §8 before M4.
-// They become the only valid values for `Task.assignee`.
-export const TEAM = ['Teammate A', 'Teammate B', 'Teammate C'];
+// Example team names (PRD §8). The only valid values for `Task.assignee`.
+export const TEAM = ['Sian Edwards', 'Ela Morgan', 'Bingo Edwards', 'Bonnie Morgan'];
+
+// Formats a Date as 'YYYY-MM-DD' in local time.
+// (toISOString() uses UTC, which can give the wrong day near midnight.)
+function toISODate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Today's date shifted by a number of days, as 'YYYY-MM-DD'.
+function daysFromToday(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return toISODate(date);
+}
+
+// Mock tasks for first load. Dates are relative to today so the
+// due-date colours (M8) still make sense whenever the app is opened.
+function makeSeedTasks() {
+  return [
+    {
+      id: 'seed-1',
+      title: 'Build the Anchor Board',
+      description: 'Four pinned slots for the final deliverables.',
+      type: 'feature',
+      status: 'todo',
+      assignee: TEAM[2],
+      dueDate: daysFromToday(5),
+      createdDate: daysFromToday(-2),
+    },
+    {
+      id: 'seed-2',
+      title: 'Add the task modal',
+      description: 'One modal for adding and editing tasks.',
+      type: 'feature',
+      status: 'in-progress',
+      assignee: TEAM[0],
+      dueDate: daysFromToday(0),
+      createdDate: daysFromToday(-3),
+    },
+    {
+      id: 'seed-3',
+      title: 'Fix due date showing the wrong day',
+      description: 'Dates near midnight show as the day before.',
+      type: 'bug',
+      status: 'review',
+      assignee: TEAM[1],
+      dueDate: daysFromToday(-1),
+      createdDate: daysFromToday(-4),
+    },
+    {
+      id: 'seed-4',
+      title: 'Set up Vite and Tailwind',
+      description: 'Project scaffold with the design tokens added.',
+      type: 'feature',
+      status: 'done',
+      assignee: TEAM[3],
+      dueDate: daysFromToday(-3),
+      createdDate: daysFromToday(-6),
+    },
+  ];
+}
 
 /**
  * A tiny localStorage hook — survives reloads, no library needed.
@@ -74,9 +136,10 @@ export function useLocalStorage(key, initialValue) {
 }
 
 export default function App() {
-  // TODO M4 data-model:
-  //   const [tasks, setTasks] = useLocalStorage('vibetracker.tasks', [/* 3-4 seed tasks */]);
-  //
+  // The seed is only used when nothing is saved in the browser yet.
+  // setTasks is unused until M5 adds editing.
+  const [tasks, setTasks] = useLocalStorage('vibetracker.tasks', makeSeedTasks());
+
   // TODO M5 crud-modal:
   //   const [editing, setEditing] = useState(null);
   //
@@ -87,81 +150,63 @@ export default function App() {
     <div className="min-h-screen p-6">
       <header className="mb-6 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-2xl font-semibold text-brand-primary">
             Vibecoding Project Tracker
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-text-muted">
             {/* Replace this line with your team name from PRD §11. */}
             Team starter
           </p>
         </div>
       </header>
 
-      {/* THROWAWAY M3 swatches: delete this line and the TokenSwatches function at the bottom of the file */}
-      <TokenSwatches />
-
       {/* TODO M11 anchors: render the Anchor Board (Presentation / Demo / Report / Documentation) above the board. */}
 
       {/*
-        TODO M4 data-model:
-          Render a Kanban board with the four columns from STAGES.
-          Each column should display the tasks whose status matches its id.
-          Pre-populate 3-4 mock tasks so the board isn't empty on first load.
-
         TODO M5 crud-modal:
           Add a "+" button that opens a modal with every Task field.
           Clicking a card should open the same modal in edit mode.
       */}
-      <main className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-slate-400">
-        Build the four-column board here · M4
+      <main className="grid grid-cols-4 gap-4">
+        {STAGES.map((stage) => (
+          <Column
+            key={stage.id}
+            label={stage.label}
+            tasks={tasks.filter((task) => task.status === stage.id)}
+          />
+        ))}
       </main>
     </div>
   );
 }
 
-// THROWAWAY M3: one swatch per DESIGN.md token so you can see them.
-// Delete this whole function (and <TokenSwatches /> above) once you've checked them.
-function TokenSwatches() {
-  const swatches = [
-    ['brand-primary', 'bg-brand-primary'],
-    ['brand-accent', 'bg-brand-accent'],
-    ['surface-page', 'bg-surface-page'],
-    ['surface-card', 'bg-surface-card'],
-    ['text-primary', 'bg-text-primary'],
-    ['text-muted', 'bg-text-muted'],
-    ['border-subtle', 'bg-border-subtle'],
-    ['type-feature', 'bg-type-feature'],
-    ['type-bug', 'bg-type-bug'],
-    ['due-safe', 'bg-due-safe'],
-    ['due-warning', 'bg-due-warning'],
-    ['due-overdue', 'bg-due-overdue'],
-    ['due-neutral', 'bg-due-neutral'],
-    ['due-safe-ink', 'bg-due-safe-ink'],
-    ['due-warning-ink', 'bg-due-warning-ink'],
-    ['due-overdue-ink', 'bg-due-overdue-ink'],
-    ['due-neutral-ink', 'bg-due-neutral-ink'],
-  ];
+// One board column: a heading with a count, then its task cards.
+function Column({ label, tasks }) {
   return (
-    <section className="mb-6 rounded-md border border-border-subtle bg-surface-card p-4">
-      <h2 className="mb-3 text-base font-semibold uppercase">Design tokens (test)</h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {swatches.map(([name, bg]) => (
-          <div key={name} className="rounded-md border border-border-subtle">
-            <div className={`h-12 rounded-t-md ${bg}`} />
-            <p className="p-2 font-mono text-xs">{name}</p>
-          </div>
-        ))}
-      </div>
-      <h3 className="mb-2 mt-4 text-sm font-semibold">Due tints with their ink colour</h3>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <p className="rounded-md bg-due-safe p-3 text-sm text-due-safe-ink">Due in 5 days</p>
-        <p className="rounded-md bg-due-warning p-3 text-sm text-due-warning-ink">Due today</p>
-        <p className="rounded-md bg-due-overdue p-3 text-sm text-due-overdue-ink">Overdue</p>
-        <p className="rounded-md bg-due-neutral p-3 text-sm text-due-neutral-ink">Done</p>
-      </div>
-      <p className="mt-4 text-sm">
-        Body text in Plus Jakarta Sans. <span className="font-mono">mono: 0O 1lI</span>
-      </p>
+    <section className="flex min-h-64 flex-col gap-3 rounded-lg bg-border-subtle/60 p-3">
+      <h2 className="flex items-baseline justify-between border-b border-text-muted/20 pb-2 text-base font-semibold uppercase">
+        {label}
+        <span className="rounded-full bg-surface-card px-2 text-xs font-normal text-text-muted">
+          {tasks.length}
+        </span>
+      </h2>
+      {tasks.length === 0 ? (
+        <p className="rounded-md border border-dashed border-text-muted/40 p-4 text-sm text-text-muted">
+          Nothing here yet.
+        </p>
+      ) : (
+        tasks.map((task) => <TaskCard key={task.id} task={task} />)
+      )}
     </section>
+  );
+}
+
+// A single task card. M4 shows title and assignee; later milestones add more.
+function TaskCard({ task }) {
+  return (
+    <article className="rounded-md border border-border-subtle bg-surface-card p-3">
+      <h3 className="text-sm font-medium">{task.title}</h3>
+      <p className="mt-1 text-xs text-text-muted">{task.assignee}</p>
+    </article>
   );
 }
