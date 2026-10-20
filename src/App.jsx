@@ -85,6 +85,26 @@ export const TASK_TYPES = {
   },
 };
 
+// The four final-project deliverables, in display order (PRD §5 Anchor, M11).
+// Use these IDs everywhere. Each starts with no link (url: null).
+export const ANCHORS = [
+  { id: 'presentation',  label: 'Presentation',  url: null },
+  { id: 'demo',          label: 'Demo',          url: null },
+  { id: 'report',        label: 'Report',        url: null },
+  { id: 'documentation', label: 'Documentation', url: null },
+];
+
+// True if the text is a full web link starting with http:// or https://.
+// Anything else (e.g. 'hello' or 'javascript:...') is refused, so every saved link is safe to click.
+function isValidUrl(text) {
+  try {
+    const url = new URL(text);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false; // new URL() throws if the text is not a link at all
+  }
+}
+
 // The AI tools a task's context can be written for (PRD §5, M9).
 export const CONTEXT_TOOLS = ['Claude', 'ChatGPT', 'Cursor', 'Lovable', 'Replit', 'Other'];
 
@@ -413,8 +433,18 @@ export default function App() {
     }
   }
 
-  // TODO M11 anchors:
-  //   const [anchors, setAnchors] = useLocalStorage('vibetracker.anchors', [...]);
+  // The deliverable links (M11). Saved under their own key, so they never touch the tasks.
+  const [anchors, setAnchors] = useLocalStorage('vibetracker.anchors', ANCHORS);
+
+  // Sets one anchor's link. A url of null clears it.
+  function saveAnchorUrl(id, url) {
+    setAnchors(
+      ANCHORS.map((anchor) => ({
+        ...anchor,
+        url: anchor.id === id ? url : (anchors.find((saved) => saved.id === anchor.id)?.url ?? null),
+      }))
+    );
+  }
 
   return (
     <div className="min-h-screen p-6">
@@ -442,7 +472,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* TODO M11 anchors: render the Anchor Board (Presentation / Demo / Report / Documentation) above the board. */}
+      <AnchorBoard anchors={anchors} onSave={saveAnchorUrl} />
 
       <DueLegend />
 
@@ -517,6 +547,148 @@ const cardPillClass =
   'inline-flex items-center gap-1 rounded-full border border-border-subtle px-2 py-0.5 text-xs font-medium text-brand-primary group-hover:bg-brand-primary/10 group-focus-visible:ring-2 group-focus-visible:ring-brand-primary';
 const fieldClass =
   'mt-1 w-full rounded-md border border-border-subtle bg-surface-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary';
+
+// The row of four deliverable cards above the board (M11).
+// It always shows the four ANCHORS in order, filling in any saved link by id.
+function AnchorBoard({ anchors, onSave }) {
+  return (
+    <section aria-labelledby="anchor-board-heading" className="mb-4">
+      <h2 id="anchor-board-heading" className="mb-1 text-sm font-semibold uppercase text-text-muted">
+        Deliverables
+      </h2>
+      <div className="grid grid-cols-4 gap-4">
+        {ANCHORS.map((anchor) => {
+          const url = anchors.find((saved) => saved.id === anchor.id)?.url ?? null;
+          return (
+            <AnchorCard
+              key={anchor.id}
+              anchor={{ ...anchor, url }}
+              onSave={(newUrl) => onSave(anchor.id, newUrl)}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// One deliverable card. With no link it shows an input and Save.
+// With a link it shows the link (opens in a new tab) plus Edit and Clear.
+// The dot is empty with no link and filled with one, and the hidden text says the same for screen readers.
+function AnchorCard({ anchor, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState('');
+  const hasLink = Boolean(anchor.url);
+  const showInput = !hasLink || editing;
+  const inputId = `anchor-${anchor.id}`;
+  const errorId = `anchor-${anchor.id}-error`;
+
+  function handleSubmit(event) {
+    event.preventDefault(); // stop the browser reloading the page on form submit
+    const text = draft.trim();
+    if (!isValidUrl(text)) {
+      setError('Enter a full link starting with https://');
+      return;
+    }
+    onSave(text);
+    setEditing(false);
+    setError('');
+  }
+
+  function startEditing() {
+    setDraft(anchor.url);
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    setEditing(false);
+    setError('');
+  }
+
+  function clearLink() {
+    onSave(null);
+    setDraft('');
+    setError('');
+  }
+
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-border-subtle bg-surface-card px-3 py-2">
+      {/* The label on the left, with Edit / Clear (or Cancel while editing) on the same line to save height. */}
+      <div className="flex min-h-11 items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <span
+            aria-hidden="true"
+            className={`h-3 w-3 shrink-0 rounded-full border-2 border-brand-primary ${
+              hasLink ? 'bg-brand-primary' : 'bg-transparent'
+            }`}
+          />
+          {anchor.label}
+          <span className="sr-only">{hasLink ? ' (link added)' : ' (no link yet)'}</span>
+        </h3>
+        {editing ? (
+          <button type="button" onClick={cancelEditing} className={smallButtonClass}>
+            Cancel
+          </button>
+        ) : (
+          hasLink && (
+            <div className="flex">
+              <button type="button" onClick={startEditing} className={smallButtonClass}>
+                Edit<span className="sr-only"> {anchor.label} link</span>
+              </button>
+              <button type="button" onClick={clearLink} className={smallButtonClass}>
+                Clear<span className="sr-only"> {anchor.label} link</span>
+              </button>
+            </div>
+          )
+        )}
+      </div>
+
+      {showInput ? (
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-1">
+          <label htmlFor={inputId} className="sr-only">
+            {anchor.label} link
+          </label>
+          <div className="flex gap-2">
+            <input
+              id={inputId}
+              type="url"
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError('');
+              }}
+              placeholder="https://"
+              aria-invalid={error ? 'true' : 'false'}
+              aria-describedby={error ? errorId : undefined}
+              className={`${fieldClass.replace('mt-1 ', '')} min-w-0 flex-1`}
+            />
+            <button type="submit" className={primaryButtonClass}>
+              Save
+            </button>
+          </div>
+          {error && (
+            <span id={errorId} className="text-xs text-type-bug">
+              {error}
+            </span>
+          )}
+        </form>
+      ) : (
+        <a
+          href={anchor.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={anchor.url}
+          className="inline-flex min-h-11 min-w-0 items-center gap-1.5 text-sm font-medium text-brand-accent underline hover:text-brand-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+        >
+          <Icon className="h-3.5 w-3.5">{EXTERNAL_LINK_ICON}</Icon>
+          <span className="truncate">{anchor.url}</span>
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      )}
+    </div>
+  );
+}
 
 // One board column: a heading with a count, then its task cards.
 function Column({ label, tasks, team, now, onOpen, onCopy }) {

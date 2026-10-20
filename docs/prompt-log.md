@@ -452,3 +452,41 @@ Tools used across the project (fill in as you go):
 
 
 ---
+
+### M11 · project-deliverables · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @milestones/M11-project-deliverables.md and the Anchor model in PRD.md section 5.
+   Add a row of four anchor cards above the board (Presentation, Demo, Report,
+   Documentation). Each has a URL input and a dot: empty when there's no URL, filled
+   when there is. Save to localStorage with its own key, separate from tasks.
+   When a URL is saved, make it clickable (opens in a new tab).
+   Decide with me what counts as a valid URL before building.
+   ```
+2. (Answers to Claude's questions) Valid URL: "http(s) only" (must parse as a URL and start with http:// or https://; 'hello' and 'javascript:' links are refused). Save style: "Save button + Clear".
+3. make the height smaller of deliverables
+
+**Files changed:**
+- `src/App.jsx`: new `ANCHORS` constant (the four deliverables from PRD §5, each with `url: null`); new `isValidUrl(text)` that accepts only http:// and https:// links; anchors saved under their own localStorage key `vibetracker.anchors` with `saveAnchorUrl()` (null clears a link); new `AnchorBoard` (a "Deliverables" row of four cards above the due-date key and the board) and `AnchorCard` (status dot, URL input with Save and an error message, then once saved a link that opens in a new tab with Edit and Clear)
+- `src/App.jsx` (prompt 3): the anchor cards are shorter. Edit and Clear (or Cancel while editing) now sit on the same line as the label instead of their own row, the card padding and gaps are smaller, and there is less space around the "Deliverables" heading
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M11-anchors.png`
+
+**Notes for report:**
+
+
+---
