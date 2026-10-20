@@ -27,8 +27,7 @@
 Read @milestones/M04-data-model.md and @PRD.md (sections 5, 7 and 8).
 Plan how to build the four-column board in src/App.jsx using the existing Task model,
 STAGES constant and useLocalStorage hook. Use the colour tokens from tailwind.config.js.
-Seed 4 mock tasks across different columns, using the example team names from
-PRD section 8 as assignees. Keep those names in one TEAM constant so later milestones reuse it.
+Seed 4 mock tasks across different columns, using the example team names "Sian Edwards", "Ela Morgan" and "Bingo Edwards" and "Bonnie Morgan". Keep those names in one TEAM constant so later milestones reuse it.
 Mock due dates must be relative to today (e.g. today + 5 days, today + 12 hours,
 yesterday) so the due-date colours in M8 still work whenever someone opens the app.
 Explain the plan in plain English before building.

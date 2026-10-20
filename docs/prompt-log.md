@@ -143,6 +143,7 @@ Tools used across the project (fill in as you go):
    ```
 2. yes go ahead
 3. THe columns are not distinctive and i want a seperation between them
+4. update prompt log
 
 **Files changed:**
 - `src/App.jsx`: `TEAM` set to the four example names; added `toISODate`, `daysFromToday` and `makeSeedTasks` (4 seed tasks, one per column, dates relative to today); tasks stored with `useLocalStorage('vibetracker.tasks', ...)`; four-column board with `Column` and `TaskCard` components (title + assignee, "Nothing here yet." empty state); each column is a shaded rounded panel with a divider under its heading and a pill-shaped task count; header switched to colour tokens; removed the throwaway M3 `TokenSwatches` block
@@ -159,6 +160,45 @@ Tools used across the project (fill in as you go):
 
 
 **Screenshots:** `docs/screenshots/M04-board.png`, `docs/screenshots/M04-localstorage.png`
+
+**Notes for report:**
+
+
+---
+
+### M05 · crud-modal · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @milestones/M05-crud-modal.md.
+   Plan a single TaskModal component used for both add and edit.
+   Fields: title, description, type (feature/bug), status, assignee (dropdown of the
+   example team names in the TEAM constant only), due date, and created date shown read-only.
+   "+" opens it empty; clicking a card opens it pre-filled. Include Save, Cancel and Delete.
+   Status is a dropdown, no drag-and-drop. Save to localStorage via the existing hook.
+   Escape key and clicking outside should close it without saving.
+   Explain the plan before building.
+   ```
+2. 1. Please add a title and 2. A confirmation message
+3. I want the confirmation message to be ui and not a console request i want the tasks to display more info like the type and the colours based on due date in design md and icons for team member s being initials
+
+**Files changed:**
+- `src/App.jsx`: added `editing` state plus `openNewTask`, `saveTask` and `deleteTask` in `App`, all saving through the `useLocalStorage` setter; "+ Add task" button in the header; `TaskCard` is now a button that opens the modal; new `TaskModal` component (title, description, type, status, assignee, due date, read-only created date; Save, Cancel, Delete) that edits a draft copy; Escape and clicking the backdrop close without saving; an empty title shows "Please add a title."; Delete shows an in-app message "Delete this task? This cannot be undone." with "Keep task" and "Delete task" buttons (replaced the browser confirm box; Escape backs out of it); shared button and field class constants; `formatDate` helper for the created date
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M05-add.png`, `docs/screenshots/M05-edit.png`
 
 **Notes for report:**
 
