@@ -15,7 +15,7 @@ import { getDueState, dueLabel } from './dueState';
  *   - M7  task-owner    : assignee badge + "Hand off to..." dropdown.
  *   - M8  due-tint      : color cards by due date (uses DESIGN.md §2 due-state colors).
  *   - M9  context       : a curated Context briefing field on the modal.
- *   - M10 copy-prompt   : a "Copy as Prompt Context" button that serializes the task + context.
+ *   - M10 copy-context  : a "Copy Context" button that copies the task + context as Markdown.
  *   - M11 anchors       : the Anchor Board above the Kanban.
  *   - M12 secret-sauce  : the one open-ended thing that makes your tracker yours.
  *
@@ -115,6 +115,28 @@ function aiToolLink(tool, context) {
 
 // The starting text for a new task's Context field.
 const CONTEXT_TEMPLATE = '## Background\n\n## Constraints\n\n## Tried so far\n\n## Pick up\n';
+
+// The Markdown briefing that "Copy Context" and "Open in [tool]" send (M10).
+// Empty parts (no owner, no due date, no description, no context) are left out.
+// The context is added as written, since it has its own headings from the template.
+export function buildContextMarkdown(task) {
+  const details = [
+    `Type: ${TASK_TYPES[task.type]?.label ?? task.type}`,
+    `Status: ${STAGES.find((stage) => stage.id === task.status)?.label ?? task.status}`,
+  ];
+  if (task.assignee) details.push(`Owner: ${task.assignee}`);
+  if (task.dueDate) {
+    const [day, time] = task.dueDate.split('T');
+    details.push(`Due: ${formatDate(day)}${time ? ` at ${time}` : ''}`);
+  }
+
+  const parts = [`# Task: ${task.title.trim()}\n${details.join(' · ')}`];
+  const description = task.description?.trim();
+  if (description) parts.push(`## Description\n${description}`);
+  const context = task.context?.trim();
+  if (context) parts.push(context);
+  return parts.join('\n\n') + '\n';
+}
 
 // Tasks saved before M9 have no context fields. These defaults fill them in
 // when a task is opened, so old tasks still work.
@@ -359,9 +381,9 @@ export default function App() {
     setEditing(null);
   }
 
-  // The hand-off message at the bottom of the screen. `visible` is kept separate from
-  // `message` so the text stays put while it fades out. `count` restarts the timer
-  // if two hand-offs happen close together.
+  // The message at the bottom of the screen (hand-offs and copying). `visible` is kept
+  // separate from `message` so the text stays put while it fades out. `count` restarts
+  // the timer if two messages come close together.
   const [toast, setToast] = useState({ message: '', visible: false, count: 0 });
 
   useEffect(() => {
@@ -370,14 +392,25 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toast.visible, toast.count]);
 
+  function showToast(message) {
+    setToast((current) => ({ message, visible: true, count: current.count + 1 }));
+  }
+
   // Saves the task with its new owner, then shows the confirmation.
   function handOffTask(saved) {
     saveTask(saved);
-    setToast((current) => ({
-      message: `Handed off to ${saved.assignee}.`,
-      visible: true,
-      count: current.count + 1,
-    }));
+    showToast(`Handed off to ${saved.assignee}.`);
+  }
+
+  // Copies the task's briefing (M10). The clipboard needs https or localhost,
+  // and the browser can refuse, so a failure shows its own message.
+  async function copyContext(task) {
+    try {
+      await navigator.clipboard.writeText(buildContextMarkdown(task));
+      showToast('Copied to clipboard!');
+    } catch {
+      showToast('Could not copy to the clipboard. Please try again.');
+    }
   }
 
   // TODO M11 anchors:
@@ -422,6 +455,7 @@ export default function App() {
             team={team}
             now={now}
             onOpen={setEditing}
+            onCopy={copyContext}
           />
         ))}
       </main>
@@ -436,6 +470,7 @@ export default function App() {
           now={now}
           onSave={saveTask}
           onHandOff={handOffTask}
+          onCopy={copyContext}
           onDelete={deleteTask}
           onClose={() => setEditing(null)}
         />
@@ -475,11 +510,16 @@ const confirmDeleteButtonClass = `${buttonBaseClass} bg-type-bug text-white hove
 // A lighter button for small actions next to a field: small text and no border, but still 44 px tall.
 const smallButtonClass =
   'inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-xs font-medium text-brand-primary hover:bg-brand-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary';
+// The small actions on a card. The outer part is the 44 px tall press area (DESIGN.md §4),
+// and the pill inside is the smaller part you see.
+const cardActionClass = 'group inline-flex min-h-11 items-center focus:outline-none';
+const cardPillClass =
+  'inline-flex items-center gap-1 rounded-full border border-border-subtle px-2 py-0.5 text-xs font-medium text-brand-primary group-hover:bg-brand-primary/10 group-focus-visible:ring-2 group-focus-visible:ring-brand-primary';
 const fieldClass =
   'mt-1 w-full rounded-md border border-border-subtle bg-surface-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary';
 
 // One board column: a heading with a count, then its task cards.
-function Column({ label, tasks, team, now, onOpen }) {
+function Column({ label, tasks, team, now, onOpen, onCopy }) {
   return (
     <section className="flex min-h-64 flex-col gap-3 rounded-lg bg-border-subtle/60 p-3">
       <h2 className="flex items-baseline justify-between border-b border-text-muted/20 pb-2 text-base font-semibold uppercase">
@@ -494,7 +534,14 @@ function Column({ label, tasks, team, now, onOpen }) {
         </p>
       ) : (
         tasks.map((task) => (
-          <TaskCard key={task.id} task={task} team={team} now={now} onOpen={() => onOpen(task)} />
+          <TaskCard
+            key={task.id}
+            task={task}
+            team={team}
+            now={now}
+            onOpen={() => onOpen(task)}
+            onCopy={() => onCopy(task)}
+          />
         ))
       )}
     </section>
@@ -534,32 +581,64 @@ function TypeBadge({ type }) {
   );
 }
 
-// A single task card. It is a button so it can be opened with a mouse or the keyboard.
+// A single task card. The top part is a button so it can be opened with a mouse or the keyboard.
 // The coloured left stripe and corner icon show the task type.
 // The due chip shows how soon it is due, or "Done". Unfinished tasks with no due date have no chip.
-function TaskCard({ task, team, now, onOpen }) {
+// "Copy Context" and the AI tool link sit below the button, not inside it, so pressing them
+// does not open the modal (a button inside a button is not allowed in HTML anyway).
+function TaskCard({ task, team, now, onOpen, onCopy }) {
   const style = taskTypeStyle(task.type);
   const dueText = dueLabel(task, now);
+  const toolLink = aiToolLink(task.contextTool, buildContextMarkdown(task));
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={`flex w-full items-start gap-2 rounded-md border border-l-4 border-border-subtle bg-surface-card p-3 text-left hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary ${style.stripeClass}`}
+    <div
+      className={`rounded-md border border-l-4 border-border-subtle bg-surface-card hover:shadow-md ${style.stripeClass}`}
     >
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{task.title}</span>
-        <span className="mt-2 flex items-center gap-2 text-xs text-text-muted">
-          <Avatar name={task.assignee} team={team} />
-          {task.assignee}
-        </span>
-        {dueText && (
-          <span className="mt-2 block">
-            <DueChip state={getDueState(task, now)}>{dueText}</DueChip>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full items-start gap-2 rounded-md p-3 pb-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">{task.title}</span>
+          <span className="mt-2 flex items-center gap-2 text-xs text-text-muted">
+            <Avatar name={task.assignee} team={team} />
+            {task.assignee}
           </span>
+          {dueText && (
+            <span className="mt-2 block">
+              <DueChip state={getDueState(task, now)}>{dueText}</DueChip>
+            </span>
+          )}
+        </span>
+        <TypeIcon type={task.type} />
+      </button>
+      <div className="flex justify-end gap-1 px-2">
+        <button type="button" onClick={onCopy} className={cardActionClass}>
+          <span className={cardPillClass}>
+            <Icon className="h-3 w-3">{COPY_ICON}</Icon>
+            Copy Context
+          </span>
+          <span className="sr-only"> for {task.title}</span>
+        </button>
+        {toolLink && (
+          <a
+            href={toolLink.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open in ${task.contextTool}`}
+            className={cardActionClass}
+          >
+            <span className={cardPillClass}>
+              <Icon className="h-3 w-3">{EXTERNAL_LINK_ICON}</Icon>
+              <span className="sr-only">Open {task.title} in </span>
+              {task.contextTool}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </span>
+          </a>
         )}
-      </span>
-      <TypeIcon type={task.type} />
-    </button>
+      </div>
+    </div>
   );
 }
 
@@ -639,7 +718,7 @@ function SwapIcon() {
 }
 
 // A small line icon in the text colour. Decorative only: the button text next to it says what it does.
-function Icon({ children }) {
+function Icon({ children, className = 'h-4 w-4' }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -649,7 +728,7 @@ function Icon({ children }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className="h-4 w-4 shrink-0"
+      className={`${className} shrink-0`}
     >
       {children}
     </svg>
@@ -671,6 +750,14 @@ const EXTERNAL_LINK_ICON = (
     <path d="M15 3h6v6" />
     <path d="M10 14 21 3" />
     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+  </>
+);
+
+// Two overlapping pages (Lucide copy), for "Copy Context".
+const COPY_ICON = (
+  <>
+    <rect width="14" height="14" x="8" y="8" rx="2" />
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
   </>
 );
 
@@ -704,7 +791,7 @@ function timeAgo(isoTime, now) {
 
 // One modal for adding and editing a task. It edits a draft copy,
 // so nothing changes on the board until Save is pressed.
-function TaskModal({ task, isNew, team, now, onSave, onHandOff, onDelete, onClose }) {
+function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete, onClose }) {
   // Older tasks may not have the context fields yet, so fill in the defaults first.
   const [draft, setDraft] = useState({ ...CONTEXT_DEFAULTS, ...task });
   // The context as it was when the modal opened, to tell if it has been edited.
@@ -745,7 +832,8 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onDelete, onClos
     setConfirmingTemplate(false);
   }
 
-  const toolLink = aiToolLink(draft.contextTool, draft.context);
+  // The modal copies and links the draft, so unsaved edits are included.
+  const toolLink = aiToolLink(draft.contextTool, buildContextMarkdown(draft));
 
   // dueDate holds the date and the optional time together, e.g. '2026-10-20T14:30'.
   // The modal shows them as two inputs, so split it here and join it back on change.
@@ -947,10 +1035,16 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onDelete, onClos
               Context
               <span className="ml-2 text-xs font-normal text-text-muted">Markdown supported</span>
             </label>
-            <button type="button" onClick={applyTemplate} className={smallButtonClass}>
-              <Icon>{TEMPLATE_ICON}</Icon>
-              Use template
-            </button>
+            <div className="flex gap-1">
+              <button type="button" onClick={applyTemplate} className={smallButtonClass}>
+                <Icon>{TEMPLATE_ICON}</Icon>
+                Use template
+              </button>
+              <button type="button" onClick={() => onCopy(draft)} className={smallButtonClass}>
+                <Icon>{COPY_ICON}</Icon>
+                Copy Context
+              </button>
+            </div>
           </div>
           {confirmingTemplate && (
             <div
@@ -1030,7 +1124,7 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onDelete, onClos
           </div>
           {toolLink?.tooLong && (
             <p className="mt-1 text-xs text-text-muted">
-              Too long for a link, so {draft.contextTool} opens without your text. Copy the context
+              Too long for a link, so {draft.contextTool} opens without your text. Use Copy Context
               and paste it in.
             </p>
           )}

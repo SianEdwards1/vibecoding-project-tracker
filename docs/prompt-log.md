@@ -411,3 +411,44 @@ Tools used across the project (fill in as you go):
 
 
 ---
+
+### M10 · copy-context · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @milestones/M10-copy-context.md.
+   Write one function buildContextMarkdown(task) that returns this format:
+   [PASTE YOUR FORMAT HERE]
+   Skip empty sections rather than printing blank headings.
+   Add a "Copy Context" button on each card and in the modal that copies it with
+   navigator.clipboard.writeText. Clicking the button on a card must NOT open the modal.
+   Show a short "Copied to clipboard!" confirmation. If copying fails, say so.
+   ```
+
+   Maybe i also have a small open tool button aswell i dont know if format is relevant bearing in mind a template is already used in conext text window
+2. (Answers to Claude's questions) Format: "Briefing only" (title, details line, description, then the Context as written). Empty headings inside the Context: "Keep Context as written". Open tool button: "Also add one to cards".
+3. i want the copy to be smaller i want a way to see which tool will be opened so a small label saying actual tool
+
+**Files changed:**
+- `src/App.jsx`: new `buildContextMarkdown(task)` that builds `# Task: {title}`, a `Type · Status · Owner · Due` line, `## Description`, then the Context as written (no owner, due date, description or context means that part is left out); the hand-off toast is now shared through `showToast()`; new `copyContext()` copies with `navigator.clipboard.writeText` and shows "Copied to clipboard!" or "Could not copy to the clipboard. Please try again."; task cards are now a box holding the open button plus a separate "Copy Context" button and an icon-only "Open in [tool]" link (only when the task has a tool with a link), so pressing them does not open the modal; the modal has a "Copy Context" button next to "Use template" that copies the draft, unsaved edits included; the modal's "Open in [tool]" link now sends the full briefing instead of only the Context; new `COPY_ICON` (Lucide `copy`)
+- `src/App.jsx` (prompt 3): the card's "Copy Context" and tool link are now small outlined pills (`cardActionClass` and `cardPillClass`), with a 44 px press area kept around each one; the tool link shows the tool's name (e.g. "Claude") next to the icon; `Icon` takes an optional `className` for a smaller size
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M10-copy.png`, `docs/screenshots/M10-pasted.png`
+
+**Notes for report:**
+
+
+---
