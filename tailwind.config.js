@@ -35,6 +35,13 @@ export default {
           neutral: '#ece7df', // done
           'neutral-ink': '#5a5758',
         },
+        avatar: {
+          // M7 task-owner: one per teammate, white initials on each pass WCAG AA
+          pink: '#be185d',
+          slate: '#475569',
+          cyan: '#155e75',
+          orange: '#c2410c',
+        },
       },
       // Fonts from DESIGN.md §3, loaded in index.html
       fontFamily: {

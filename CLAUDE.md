@@ -1,7 +1,7 @@
 # Vibecoding Project Tracker
 
 Uni prototype (individual assessment). Kanban board for vibecoding tasks, built milestone by milestone.
-Built solo, but the product is for vibecoding teams. Teammate names are example data from PRD.md section 8, kept in one TEAM constant.
+Built solo, but the product is for vibecoding teams. Teammate names are example data from PRD.md section 8. The TEAM constant is the starting team only: since M7 the team can be edited in the Team panel and is saved in localStorage (`vibetracker.team`).
 M2 is skipped. Ignore any "Person A/B/C" or team-split instructions in the starter files.
 Stack: Vite + React + Tailwind. Data in localStorage via the existing `useLocalStorage` hook. Deployed on Vercel from `main`.
 

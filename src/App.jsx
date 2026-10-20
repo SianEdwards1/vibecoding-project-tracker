@@ -42,8 +42,12 @@ export const STAGES = [
   { id: 'done',        label: 'Done' },
 ];
 
-// Example team names (PRD §8). The only valid values for `Task.assignee`.
+// Example team names (PRD §8). This is only the starting team: the Team panel (M7)
+// can add and remove people, and the current team is saved in localStorage.
 export const TEAM = ['Sian Edwards', 'Ela Morgan', 'Bingo Edwards', 'Bonnie Morgan'];
+
+// Most people the Team panel allows. Avatar colours repeat after the fourth.
+const MAX_TEAM_SIZE = 6;
 
 // Colour and icon for each task type (DESIGN.md §2, M6). The card, the modal and
 // anything else that shows a type read from here, so they always match.
@@ -76,6 +80,45 @@ export const TASK_TYPES = {
     ),
   },
 };
+
+// Avatar colours (DESIGN.md §2, M7). Written out in full so Tailwind builds them.
+const AVATAR_COLOURS = {
+  pink: 'bg-avatar-pink',
+  slate: 'bg-avatar-slate',
+  cyan: 'bg-avatar-cyan',
+  orange: 'bg-avatar-orange',
+};
+
+// The starting team, each person with a colour in order.
+// Every member is saved as { name, colour }, so their colour stays the same
+// even when someone else is added or removed.
+function makeStartingTeam() {
+  const colours = Object.keys(AVATAR_COLOURS);
+  return TEAM.map((name, index) => ({ name, colour: colours[index % colours.length] }));
+}
+
+// The colour for a new member: whichever colour fewest people already have.
+function nextAvatarColour(team) {
+  const colours = Object.keys(AVATAR_COLOURS);
+  const timesUsed = (colour) => team.filter((member) => member.colour === colour).length;
+  return colours.reduce((best, colour) => (timesUsed(colour) < timesUsed(best) ? colour : best));
+}
+
+// A teammate's avatar colour class. Grey if the name is not on the team.
+function avatarColour(team, name) {
+  const member = team.find((person) => person.name === name);
+  return member ? AVATAR_COLOURS[member.colour] : 'bg-text-muted';
+}
+
+// 'Sian Edwards' -> 'SE'
+function initials(name) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase())
+    .slice(0, 2)
+    .join('');
+}
 
 // The styling for a task's type. Falls back to feature if the type is ever missing.
 function taskTypeStyle(type) {
@@ -176,8 +219,22 @@ export default function App() {
   // The seed is only used when nothing is saved in the browser yet.
   const [tasks, setTasks] = useLocalStorage('vibetracker.tasks', makeSeedTasks());
 
+  // The current team, as a list of { name, colour }.
+  const [team, setTeam] = useLocalStorage('vibetracker.team', makeStartingTeam());
+
   // The task open in the modal, or null when the modal is closed.
   const [editing, setEditing] = useState(null);
+
+  // True while the Team panel is open.
+  const [showingTeam, setShowingTeam] = useState(false);
+
+  function addTeammate(name) {
+    setTeam([...team, { name, colour: nextAvatarColour(team) }]);
+  }
+
+  function removeTeammate(name) {
+    setTeam(team.filter((member) => member.name !== name));
+  }
 
   // Opens the modal with a blank task. It is only added to the board on Save.
   function openNewTask() {
@@ -187,7 +244,7 @@ export default function App() {
       description: '',
       type: 'feature',
       status: 'todo',
-      assignee: TEAM[0],
+      assignee: team[0].name,
       dueDate: null,
       createdDate: daysFromToday(0),
     });
@@ -209,6 +266,27 @@ export default function App() {
     setEditing(null);
   }
 
+  // The hand-off message at the bottom of the screen. `visible` is kept separate from
+  // `message` so the text stays put while it fades out. `count` restarts the timer
+  // if two hand-offs happen close together.
+  const [toast, setToast] = useState({ message: '', visible: false, count: 0 });
+
+  useEffect(() => {
+    if (!toast.visible) return;
+    const timer = setTimeout(() => setToast((current) => ({ ...current, visible: false })), 3000);
+    return () => clearTimeout(timer);
+  }, [toast.visible, toast.count]);
+
+  // Saves the task with its new owner, then shows the confirmation.
+  function handOffTask(saved) {
+    saveTask(saved);
+    setToast((current) => ({
+      message: `Handed off to ${saved.assignee}.`,
+      visible: true,
+      count: current.count + 1,
+    }));
+  }
+
   // TODO M11 anchors:
   //   const [anchors, setAnchors] = useLocalStorage('vibetracker.anchors', [...]);
 
@@ -224,9 +302,18 @@ export default function App() {
             Team starter
           </p>
         </div>
-        <button type="button" onClick={openNewTask} className={primaryButtonClass}>
-          + Add task
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowingTeam(true)}
+            className={secondaryButtonClass}
+          >
+            Team ({team.length})
+          </button>
+          <button type="button" onClick={openNewTask} className={primaryButtonClass}>
+            + Add task
+          </button>
+        </div>
       </header>
 
       {/* TODO M11 anchors: render the Anchor Board (Presentation / Demo / Report / Documentation) above the board. */}
@@ -237,6 +324,7 @@ export default function App() {
             key={stage.id}
             label={stage.label}
             tasks={tasks.filter((task) => task.status === stage.id)}
+            team={team}
             onOpen={setEditing}
           />
         ))}
@@ -248,11 +336,34 @@ export default function App() {
           key={editing.id}
           task={editing}
           isNew={!tasks.some((task) => task.id === editing.id)}
+          team={team}
           onSave={saveTask}
+          onHandOff={handOffTask}
           onDelete={deleteTask}
           onClose={() => setEditing(null)}
         />
       )}
+
+      {showingTeam && (
+        <TeamModal
+          team={team}
+          tasks={tasks}
+          onAdd={addTeammate}
+          onRemove={removeTeammate}
+          onClose={() => setShowingTeam(false)}
+        />
+      )}
+
+      {/* Always on the page (just invisible) so screen readers announce new messages. */}
+      <div
+        role="status"
+        aria-live="polite"
+        className={`fixed bottom-6 left-1/2 -translate-x-1/2 rounded-md bg-text-primary px-4 py-3 text-sm font-medium text-white shadow-lg transition-opacity duration-200 ${
+          toast.visible ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      >
+        {toast.message}
+      </div>
     </div>
   );
 }
@@ -268,7 +379,7 @@ const fieldClass =
   'mt-1 w-full rounded-md border border-border-subtle bg-surface-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary';
 
 // One board column: a heading with a count, then its task cards.
-function Column({ label, tasks, onOpen }) {
+function Column({ label, tasks, team, onOpen }) {
   return (
     <section className="flex min-h-64 flex-col gap-3 rounded-lg bg-border-subtle/60 p-3">
       <h2 className="flex items-baseline justify-between border-b border-text-muted/20 pb-2 text-base font-semibold uppercase">
@@ -283,7 +394,7 @@ function Column({ label, tasks, onOpen }) {
         </p>
       ) : (
         tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onOpen={() => onOpen(task)} />
+          <TaskCard key={task.id} task={task} team={team} onOpen={() => onOpen(task)} />
         ))
       )}
     </section>
@@ -325,7 +436,7 @@ function TypeBadge({ type }) {
 
 // A single task card. It is a button so it can be opened with a mouse or the keyboard.
 // The coloured left stripe and corner icon show the task type.
-function TaskCard({ task, onOpen }) {
+function TaskCard({ task, team, onOpen }) {
   const style = taskTypeStyle(task.type);
   return (
     <button
@@ -335,10 +446,45 @@ function TaskCard({ task, onOpen }) {
     >
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium">{task.title}</span>
-        <span className="mt-1 block text-xs text-text-muted">{task.assignee}</span>
+        <span className="mt-2 flex items-center gap-2 text-xs text-text-muted">
+          <Avatar name={task.assignee} team={team} />
+          {task.assignee}
+        </span>
       </span>
       <TypeIcon type={task.type} />
     </button>
+  );
+}
+
+// A circle with the teammate's initials in their colour. Hidden from screen readers
+// because the full name is always written next to it.
+function Avatar({ name, team }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColour(team, name)}`}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+// Two arrows pointing opposite ways, between the owner and "Hand off to…" (Lucide arrow-right-left).
+// Decorative only: the words next to it already say what it means.
+function SwapIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="h-5 w-5 shrink-0 text-brand-primary"
+    >
+      <path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16" />
+    </svg>
   );
 }
 
@@ -353,7 +499,7 @@ function formatDate(isoDate) {
 
 // One modal for adding and editing a task. It edits a draft copy,
 // so nothing changes on the board until Save is pressed.
-function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
+function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) {
   const [draft, setDraft] = useState(task);
   const [error, setError] = useState('');
   // True while the "Delete this task?" message is showing.
@@ -374,14 +520,26 @@ function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
     setDraft({ ...draft, [field]: value });
   }
 
-  function handleSubmit(event) {
-    event.preventDefault(); // stop the browser reloading the page on form submit
+  // The draft with a tidied title, or null (and an error message) if the title is empty.
+  function checkedDraft() {
     const title = draft.title.trim();
     if (!title) {
       setError('Please add a title.');
-      return;
+      return null;
     }
-    onSave({ ...draft, title });
+    return { ...draft, title };
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault(); // stop the browser reloading the page on form submit
+    const checked = checkedDraft();
+    if (checked) onSave(checked);
+  }
+
+  // Picking a name in "Hand off to…" saves straight away, including any other edits.
+  function handOff(name) {
+    const checked = checkedDraft();
+    if (checked) onHandOff({ ...checked, assignee: name });
   }
 
   return (
@@ -488,20 +646,24 @@ function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
             </select>
           </label>
 
-          <label className="block text-sm font-medium">
-            Assignee
-            <select
-              value={draft.assignee}
-              onChange={(event) => update('assignee', event.target.value)}
-              className={fieldClass}
-            >
-              {TEAM.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* A new task picks its first owner here. An existing task changes owner
+              through the Owner box below. */}
+          {isNew && (
+            <label className="block text-sm font-medium">
+              Assignee
+              <select
+                value={draft.assignee}
+                onChange={(event) => update('assignee', event.target.value)}
+                className={fieldClass}
+              >
+                {team.map((member) => (
+                  <option key={member.name} value={member.name}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="block text-sm font-medium">
             Due date
@@ -514,6 +676,41 @@ function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
             />
           </label>
         </div>
+
+        {/* Owner box: who has the task now, a swap icon, then who to hand it to. */}
+        {!isNew && (
+          <fieldset className="rounded-md border border-border-subtle p-3">
+            <legend className="px-1 text-sm font-medium">Owner</legend>
+            <div className="flex items-center gap-3">
+              <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                <Avatar name={draft.assignee} team={team} />
+                <span className="truncate">{draft.assignee}</span>
+              </span>
+              <SwapIcon />
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">Hand off to</span>
+                {/* Always shows the placeholder: picking a name hands off at once. */}
+                <select
+                  value=""
+                  onChange={(event) => handOff(event.target.value)}
+                  disabled={team.length < 2}
+                  className={`${fieldClass.replace('mt-1 ', '')} disabled:cursor-not-allowed disabled:text-text-muted`}
+                >
+                  <option value="" disabled>
+                    {team.length > 1 ? 'Hand off to…' : 'No one else on the team'}
+                  </option>
+                  {team
+                    .filter((member) => member.name !== draft.assignee)
+                    .map((member) => (
+                      <option key={member.name} value={member.name}>
+                        {member.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+          </fieldset>
+        )}
 
         <p className="text-sm text-text-muted">Created {formatDate(draft.createdDate)}</p>
 
@@ -564,6 +761,139 @@ function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
             </button>
           </div>
         )}
+      </form>
+    </div>
+  );
+}
+
+// The Team panel: see who is on the team, how many tasks each person has
+// in progress, add someone or remove someone. Changes save straight away.
+function TeamModal({ team, tasks, onAdd, onRemove, onClose }) {
+  const [newName, setNewName] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const isFull = team.length >= MAX_TEAM_SIZE;
+
+  function handleAdd(event) {
+    event.preventDefault(); // stop the browser reloading the page on form submit
+    const name = newName.trim();
+    if (!name) {
+      setError('Please type a name.');
+      return;
+    }
+    if (team.some((member) => member.name.toLowerCase() === name.toLowerCase())) {
+      setError(`${name} is already on the team.`);
+      return;
+    }
+    onAdd(name);
+    setNewName('');
+    setError('');
+  }
+
+  // Someone who still owns tasks can't be removed, so no task is ever left without an owner.
+  function handleRemove(name) {
+    const owned = tasks.filter((task) => task.assignee === name).length;
+    if (owned > 0) {
+      setError(
+        `${name} still owns ${owned} ${owned === 1 ? 'task' : 'tasks'}. Hand ${owned === 1 ? 'it' : 'them'} off first.`
+      );
+      return;
+    }
+    onRemove(name);
+    setError('');
+  }
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-text-primary/50 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="team-modal-heading"
+        onSubmit={handleAdd}
+        className="flex w-full max-w-md flex-col gap-4 rounded-lg border-t-8 border-t-brand-primary bg-surface-card p-6"
+      >
+        <h2 id="team-modal-heading" className="text-lg font-semibold">
+          Team
+        </h2>
+
+        <ul className="flex flex-col divide-y divide-border-subtle">
+          {team.map((member) => {
+            const inProgress = tasks.filter(
+              (task) => task.assignee === member.name && task.status === 'in-progress'
+            ).length;
+            return (
+              <li key={member.name} className="flex items-center gap-3 py-2">
+                <Avatar name={member.name} team={team} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{member.name}</span>
+                  <span className="block text-xs text-text-muted">{inProgress} in progress</span>
+                </span>
+                {team.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(member.name)}
+                    aria-label={`Remove ${member.name}`}
+                    className={dangerButtonClass}
+                  >
+                    Remove
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        {error && (
+          <p role="alert" className="rounded-md bg-due-overdue p-3 text-sm text-due-overdue-ink">
+            {error}
+          </p>
+        )}
+
+        {isFull ? (
+          <p className="text-sm text-text-muted">
+            The team is full ({MAX_TEAM_SIZE} people). Remove someone to add another.
+          </p>
+        ) : (
+          <div className="flex items-end gap-2">
+            <label className="block flex-1 text-sm font-medium">
+              Add a teammate
+              <input
+                type="text"
+                autoFocus
+                maxLength={40}
+                value={newName}
+                onChange={(event) => {
+                  setNewName(event.target.value);
+                  setError('');
+                }}
+                placeholder="Full name"
+                className={fieldClass}
+              />
+            </label>
+            <button type="submit" className={primaryButtonClass}>
+              Add
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button type="button" onClick={onClose} className={secondaryButtonClass}>
+            Close
+          </button>
+        </div>
       </form>
     </div>
   );

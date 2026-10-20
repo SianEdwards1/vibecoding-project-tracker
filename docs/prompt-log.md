@@ -242,3 +242,48 @@ Tools used across the project (fill in as you go):
 
 
 ---
+
+### M07 · task-owner · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @milestones/M07-task-owner.md.
+   1. Show an initials avatar for the assignee on each card (each name in the TEAM
+      constant gets its own consistent colour).
+   2. Add a "Hand off to…" dropdown in the modal that lists the other teammates and
+      reassigns the task when picked.
+   3. Show a short visual confirmation when a task is handed off, e.g. "Handed to Alex".
+   4. Optional, only after 1 to 3 work: a strip above the board showing each teammate
+      and how many in-progress tasks they have.
+   Plan first, then build 1 to 3 before asking me about 4.
+   ```
+2. For part 4 not a whos deiving what a team button at the top where you can see the people in the team remove them or add another im not sure what to replace whos driving what but i dont think its a good
+3. (Answers picked from Claude's multiple-choice questions) Team rule: "Yes, make it editable". Removing: "Block until handed off". Counts: "Yes, show counts". Team size: "1 to 6, colours repeat after 4".
+4. the hand off to could look better and be better grouped with the owner maybe a switch icon to show its changing owner
+
+**Files changed:**
+- `src/App.jsx`: new `Avatar` component (initials in a coloured circle) shown with the assignee name on every card and in the modal; `initials`, `avatarColour`, `makeStartingTeam` and `nextAvatarColour` helpers; the team is now state saved with `useLocalStorage('vibetracker.team', ...)` as a list of `{ name, colour }`, starting from the `TEAM` constant, so each person keeps their colour when others are added or removed; for existing tasks the modal shows the owner and a "Hand off to…" dropdown listing only the other teammates, which saves straight away (new tasks keep the Assignee dropdown); a toast "Handed off to {name}." fades in and out (200 ms) and hides after 3 seconds, announced to screen readers; replaced the optional "who's driving what" strip with a "Team (n)" button that opens a `TeamModal` listing each teammate with their avatar and in-progress count, with Remove (blocked while the person still owns tasks, and hidden when only one person is left) and an "Add a teammate" field (no blanks or duplicates, up to 6 people)
+- `src/App.jsx` (prompt 4): owner and "Hand off to…" moved into one "Owner" box below the other fields: current owner's avatar and name, a swap icon (inline SVG `SwapIcon`, Lucide arrow-right-left shape), then the hand-off dropdown, which is greyed out when nobody else is on the team
+- `tailwind.config.js`: four avatar colour tokens (`avatar-pink`, `avatar-slate`, `avatar-cyan`, `avatar-orange`)
+- `DESIGN.md`: new "Teammate avatars" table in section 2
+- `CLAUDE.md`: TEAM line updated to say the team is now editable and saved in localStorage
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M07-avatars.png`, `docs/screenshots/M07-handoff.png`
+
+**Notes for report:**
+
+
+---

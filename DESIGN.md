@@ -55,6 +55,17 @@ These are the colors the build milestones will reference. Once chosen, paste the
 | `due-overdue` | `#fde3e0` | `due-overdue-ink` | `#b42318` | Past due |
 | `due-neutral` | `#ece7df` | `due-neutral-ink` | `#5a5758` | Done (overrides date) |
 
+### Teammate avatars (M7 `task-owner`)
+
+White initials on a solid circle. Each teammate gets one colour, in `TEAM` order. Chosen to stay clear of the type and due-date colours.
+
+| Token | Hex | Teammate slot |
+|---|---|---|
+| `avatar-pink` | `#be185d` | 1st |
+| `avatar-slate` | `#475569` | 2nd |
+| `avatar-cyan` | `#155e75` | 3rd |
+| `avatar-orange` | `#c2410c` | 4th |
+
 ## 3. Typography
 
 | Role | Font | Why |
