@@ -45,6 +45,43 @@ export const STAGES = [
 // Example team names (PRD §8). The only valid values for `Task.assignee`.
 export const TEAM = ['Sian Edwards', 'Ela Morgan', 'Bingo Edwards', 'Bonnie Morgan'];
 
+// Colour and icon for each task type (DESIGN.md §2, M6). The card, the modal and
+// anything else that shows a type read from here, so they always match.
+// Class names are written out in full because Tailwind only builds classes it can find in the code.
+export const TASK_TYPES = {
+  feature: {
+    label: 'Feature',
+    textClass: 'text-type-feature',
+    borderClass: 'border-type-feature',
+    stripeClass: 'border-l-type-feature',
+    topStripeClass: 'border-t-type-feature',
+    selectedClass: 'border-type-feature bg-type-feature/10 text-type-feature',
+    // A four-point sparkle: something new.
+    icon: <path d="M12 3l2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4z" />,
+  },
+  bug: {
+    label: 'Bug',
+    textClass: 'text-type-bug',
+    borderClass: 'border-type-bug',
+    stripeClass: 'border-l-type-bug',
+    topStripeClass: 'border-t-type-bug',
+    selectedClass: 'border-type-bug bg-type-bug/10 text-type-bug',
+    // A bug: body, head and legs.
+    icon: (
+      <>
+        <path d="m8 2 1.88 1.88M14.12 3.88 16 2M9 7.13v-1a3 3 0 1 1 6 0v1" />
+        <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6zM12 20v-9" />
+        <path d="M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4" />
+      </>
+    ),
+  },
+};
+
+// The styling for a task's type. Falls back to feature if the type is ever missing.
+function taskTypeStyle(type) {
+  return TASK_TYPES[type] ?? TASK_TYPES.feature;
+}
+
 // Formats a Date as 'YYYY-MM-DD' in local time.
 // (toISOString() uses UTC, which can give the wrong day near midnight.)
 function toISODate(date) {
@@ -253,16 +290,54 @@ function Column({ label, tasks, onOpen }) {
   );
 }
 
+// The icon for a task type, in that type's colour. It has a label for screen readers,
+// unless `decorative` is set because the type name is already written next to it.
+function TypeIcon({ type, className = 'h-4 w-4', decorative = false }) {
+  const style = taskTypeStyle(type);
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...(decorative ? { 'aria-hidden': 'true' } : { role: 'img', 'aria-label': style.label })}
+      className={`${className} shrink-0 ${style.textClass}`}
+    >
+      {style.icon}
+    </svg>
+  );
+}
+
+// A small pill with the type's icon and name, e.g. in the modal heading.
+function TypeBadge({ type }) {
+  const style = taskTypeStyle(type);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-xs ${style.borderClass} ${style.textClass}`}
+    >
+      <TypeIcon type={type} className="h-3.5 w-3.5" decorative />
+      {style.label}
+    </span>
+  );
+}
+
 // A single task card. It is a button so it can be opened with a mouse or the keyboard.
+// The coloured left stripe and corner icon show the task type.
 function TaskCard({ task, onOpen }) {
+  const style = taskTypeStyle(task.type);
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="w-full rounded-md border border-border-subtle bg-surface-card p-3 text-left hover:border-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+      className={`flex w-full items-start gap-2 rounded-md border border-l-4 border-border-subtle bg-surface-card p-3 text-left hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary ${style.stripeClass}`}
     >
-      <span className="block text-sm font-medium">{task.title}</span>
-      <span className="mt-1 block text-xs text-text-muted">{task.assignee}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">{task.title}</span>
+        <span className="mt-1 block text-xs text-text-muted">{task.assignee}</span>
+      </span>
+      <TypeIcon type={task.type} />
     </button>
   );
 }
@@ -323,11 +398,14 @@ function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
         aria-modal="true"
         aria-labelledby="task-modal-heading"
         onSubmit={handleSubmit}
-        className="flex w-full max-w-md flex-col gap-4 rounded-lg bg-surface-card p-6"
+        className={`flex w-full max-w-md flex-col gap-4 rounded-lg border-t-8 bg-surface-card p-6 ${taskTypeStyle(draft.type).topStripeClass}`}
       >
-        <h2 id="task-modal-heading" className="text-lg font-semibold">
-          {isNew ? 'Add task' : 'Edit task'}
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 id="task-modal-heading" className="text-lg font-semibold">
+            {isNew ? 'Add task' : 'Edit task'}
+          </h2>
+          <TypeBadge type={draft.type} />
+        </div>
 
         <label className="block text-sm font-medium">
           Title
@@ -361,17 +439,39 @@ function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
         </label>
 
         <div className="grid grid-cols-2 gap-4">
-          <label className="block text-sm font-medium">
-            Type
-            <select
-              value={draft.type}
-              onChange={(event) => update('type', event.target.value)}
-              className={fieldClass}
-            >
-              <option value="feature">Feature</option>
-              <option value="bug">Bug</option>
-            </select>
-          </label>
+          {/* One button per type. They are radio buttons underneath (hidden with sr-only),
+              so arrow keys and screen readers work. The selected one is highlighted
+              in its type colour from TASK_TYPES. */}
+          <fieldset className="text-sm font-medium">
+            <legend>Type</legend>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              {Object.entries(TASK_TYPES).map(([value, style]) => {
+                const selected = draft.type === value;
+                return (
+                  <label key={value} className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name="task-type"
+                      value={value}
+                      checked={selected}
+                      onChange={() => update('type', value)}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={`flex items-center justify-center gap-1.5 rounded-md border px-2 py-2 font-mono text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-brand-primary ${
+                        selected
+                          ? `font-semibold ${style.selectedClass}`
+                          : 'border-border-subtle bg-surface-card text-text-muted hover:border-text-muted'
+                      }`}
+                    >
+                      <TypeIcon type={value} decorative />
+                      {style.label}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <label className="block text-sm font-medium">
             Status

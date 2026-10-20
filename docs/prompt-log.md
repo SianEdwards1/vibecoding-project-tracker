@@ -204,3 +204,41 @@ Tools used across the project (fill in as you go):
 
 
 ---
+
+### M06 · tag-style · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @milestones/M06-tag-style.md and the feature/bug tokens in @tailwind.config.js.
+   Make feature and bug tasks visually distinct using those tokens, with a small icon
+   in the corner of each card. Put the colour + icon logic in one shared place so the
+   card, the modal and anything else use exactly the same styling.
+   Don't add an icon library unless I agree; inline SVG is fine.
+   Leave room for M8 due-date colours: suggest how type colour and due colour will
+   both fit on one card without clashing (e.g. one as a border/badge, one as a tint).
+   ```
+2. can u also make the choose type bug or feature drop down match this style
+3. can u change the type choice to not be a dropdown and just be like a button selector that highlights when selected
+
+**Files changed:**
+- `src/App.jsx`: new `TASK_TYPES` constant (label, colour classes and inline SVG icon for feature and bug) and `taskTypeStyle` helper as the one shared place for type styling; new `TypeIcon` and `TypeBadge` components; `TaskCard` has a 4 px left stripe in the type colour and the type icon in the top-right corner (hover now uses a shadow so the stripe keeps its colour); `TaskModal` has a top stripe in the type colour and a type badge next to the heading, both updating live when the type changes; the Type dropdown was first styled in the type colours, then replaced with two buttons (Feature, Bug) built on hidden radio buttons, where the selected one is highlighted with its type colour border, a light tint of that colour and bold text (`selectedClass` added to `TASK_TYPES`); `TypeIcon` has a `decorative` option so screen readers don't read the type name twice where it is already written next to the icon
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M06-types.png`, `docs/screenshots/M06-modal.png`
+
+**Notes for report:**
+
+
+---
