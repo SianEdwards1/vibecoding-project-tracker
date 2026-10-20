@@ -490,3 +490,108 @@ Tools used across the project (fill in as you go):
 
 
 ---
+
+### M12 · secret-sauce · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @tailwind.config.js and the main board components before starting. Work through
+   these in order, and stop after each section so I can check it before you move on.
+
+   ## 1. Dark mode
+   - Add a light/dark toggle in the header (sun/moon icon).
+   - Default to the system setting, and remember my choice.
+   - Use Tailwind's dark: classes. Every colour, including the due-* tokens, needs a
+     dark version that still passes contrast checks.
+
+   ## 2. Filters
+   Add a filter bar above the board with:
+   - Person (multi-select, shows avatars or initials)
+   - Due date (Overdue, Due today, This week, No date)
+   - AI tool (multi-select)
+   Filters combine (AND). Show a "Clear filters" button when any are active, and a count
+   like "Showing 8 of 23 tasks".
+
+   ## 3. Collapsible columns
+   - Add a collapse button (chevron icon) to each column header.
+   - A collapsed column becomes a thin vertical strip showing the column name and task count.
+   - Remember which columns are collapsed.
+
+   ## 4. Stats panel
+   Add a "Stats" button (chart icon) next to the Team button. It opens a modal showing:
+   - Most used AI tool (with counts for each tool)
+   - How tasks are spread across due dates (Overdue, Today, This week, Later, No date)
+   - Who has the most open tasks
+   - Who has overdue tasks, and how many
+   Keep it simple: small bar charts or counts, no heavy chart library unless one is
+   already installed. Stats should respect the current filters.
+
+   ## 5. Team menu
+   - Add person: user-plus icon
+   - Remove person: bin icon, with a confirm step before removing
+   - Show each person's avatar or initials and their open task count
+
+   ## 6. Icons
+   For any button with an obvious matching icon, add it (e.g. edit = pencil, delete = bin,
+   copy = clipboard, close = X, settings = cog, filter = funnel). Use one icon library
+   consistently. If one is already installed, use that. Otherwise use lucide-react.
+   Icon-only buttons need an aria-label and a tooltip.
+
+   ## 7. Accessibility and visual review
+   Go through the whole UI in both light and dark mode and fix:
+   - Text and badge contrast (aim for WCAG AA, 4.5:1 for normal text)
+   - Due states must not rely on colour alone. Keep the clock icon and the "Due in..." text
+   - Visible focus styles on all interactive elements
+   - Everything usable by keyboard, including modals (focus trap, Esc to close)
+   - Consistent spacing, border radius and font sizes across cards, columns and modals
+   Then give me a short list of what you changed and anything you'd still improve.
+
+   Don't add new features beyond this list. If something conflicts with existing code or
+   you need to make a design call, tell me what you chose and why.
+   ```
+2. Looks good this is M12 stuff Dark mode lppks good move on
+3. I think the filter options should be collasable so if you choose to filter by perople the options are then clickable
+4. Ready for u to move on
+5. Happt with this
+6. Next
+7. next
+8. ready
+9. Can u make tasks drag and dropable
+10. can u put some dummy data in please
+
+**Files changed:**
+- `tailwind.config.js`: `darkMode: 'class'`; a `-dark` twin for every colour token (brand, surface, text, border, type and all `due-*` tints and inks), each checked for WCAG AA contrast
+- `index.html`: a small script that sets light or dark before the page draws (saved choice, otherwise the system setting), so it doesn't flash light first
+- `src/index.css`: dark page background and text; `color-scheme: dark` so date pickers and dropdowns go dark too
+- `src/dueState.js`: new `dueGroup(task, now)` (done, none, overdue, today, week, later), shared by the filters and the Stats panel
+- `scripts/check-due-state.mjs`: 10 new checks for `dueGroup` (25 checks in total)
+- `src/App.jsx` (section 1): `dark:` classes next to every colour class; `useTheme()` hook saved under `vibetracker.theme`; sun/moon toggle in the header
+- `src/App.jsx` (section 2, prompt 3): `FilterBar` with Person (avatars), Due date and AI tool filters (AND between filters, any-of inside one), "Showing X of Y tasks", "Clear filters"; each filter is a button that opens its options, one at a time, and shows how many are on while closed; empty columns say "No tasks here match the filters."; removing a teammate also clears their filter
+- `src/App.jsx` (section 3): collapse button on each column header; a collapsed column is a thin strip with the name and count; saved under `vibetracker.collapsed`; the board is now a flex row so open columns widen
+- `src/App.jsx` (section 4): "Stats" button and `StatsModal` with most used AI tool, open tasks by due date, most open tasks per person and who has overdue tasks; plain div bar charts with the number next to each bar; uses the filtered tasks
+- `src/App.jsx` (section 5): Team panel shows open task counts; user-plus icon on Add; icon-only bin button on Remove with a "Remove {name} from the team?" confirm step (Keep / Remove)
+- `src/App.jsx` (section 6): icons on Team, Add task, anchor Edit and Clear, Delete, Delete task, Remove and Close; Copy Context now uses a clipboard icon; every icon is an inline Lucide icon through the one `Icon` component, no package added
+- `src/App.jsx` (section 7): `useFocusTrap()` keeps Tab inside the Task, Team and Stats modals and returns focus to what opened them; blue text turns brand-accent on hover (brand-primary on its hover tint was 3.94:1); placeholders use text-muted (the browser grey was 2.54:1); Stats and Team modals use the same gap and max height as the Task modal
+- `src/App.jsx` (prompt 9): cards can be dragged to another column with the browser's own drag and drop events (no library); `moveTask()` changes the status and shows "Moved to {column}."; the dragged card fades and the column under it gets a blue outline; collapsed strips take drops too; only cards from this board are accepted (`TASK_DRAG_TYPE`); the card's tool link no longer drags its web address
+- `src/App.jsx` (prompt 10): `makeSeedTasks()` now has 10 tasks (was 4), still with dates relative to today: every column, every due state and due-date filter, every TEAM name, 6 of the AI tools, 3 tasks with a filled-in context; new `hoursAgo()` helper for the context timestamps. (Overlaps the M13 demo dataset step.)
+- `DESIGN.md`: new "Dark mode" token table with contrast ratios in §2; dark mode crossed out of §7 Out of scope; "+ Add task" microcopy now says a plus icon replaces the "+"; §4 drag affordance now describes drag and drop, with the status dropdown kept for keyboard and screen reader users
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M12-sauce.png`
+
+**Notes for report:**
+
+
+---

@@ -35,6 +35,34 @@ export function getDueState(task, now) {
   return 'calm';
 }
 
+/**
+ * Which due-date group an open task is in, for the filters and the Stats panel (M12).
+ * Each task is in exactly one group:
+ *   done:    finished, whatever its date (never overdue, the same as getDueState)
+ *   none:    no due date
+ *   overdue: past due
+ *   today:   due before the end of today
+ *   week:    due before the end of the 7th day, counting today as day 1
+ *   later:   anything after that
+ * @returns {'done'|'none'|'overdue'|'today'|'week'|'later'}
+ */
+export function dueGroup(task, now) {
+  if (task.status === 'done') return 'done';
+  if (!task.dueDate) return 'none';
+  const deadline = dueDeadline(task.dueDate);
+  if (deadline <= now) return 'overdue';
+  // Midnight at the end of today, and at the end of the 7th day.
+  // setDate() is used instead of adding hours so clock changes don't move them.
+  const endOfToday = new Date(now);
+  endOfToday.setHours(0, 0, 0, 0);
+  endOfToday.setDate(endOfToday.getDate() + 1);
+  const endOfWeek = new Date(endOfToday);
+  endOfWeek.setDate(endOfWeek.getDate() + 6);
+  if (deadline <= endOfToday) return 'today';
+  if (deadline <= endOfWeek) return 'week';
+  return 'later';
+}
+
 // e.g. '45 min', '3h', '1 day', '4 days'. Always rounds down.
 function formatTimeSpan(ms) {
   if (ms < HOUR) return `${Math.max(1, Math.floor(ms / MINUTE))} min`;

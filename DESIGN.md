@@ -68,6 +68,26 @@ White initials on a solid circle. Each teammate gets one colour, in `TEAM` order
 | `avatar-cyan` | `#155e75` | 3rd |
 | `avatar-orange` | `#c2410c` | 4th |
 
+### Dark mode
+
+Added after M11. Each light token has a `-dark` twin, used with Tailwind `dark:` classes (e.g. `bg-surface-card dark:bg-surface-card-dark`). The page is a dark navy, not black, and the text is a warm off-white, so it stays clear of the grey-on-black anti-reference. Solid buttons (`brand-primary`, `type-bug`) and the avatar colours keep their light values, because their white text already passes AA on them.
+
+| Token | Hex | Contrast |
+|---|---|---|
+| `surface-page-dark` | `#0f1b2a` | |
+| `surface-card-dark` | `#172638` | |
+| `text-primary-dark` | `#f1ede6` | 13.1:1 on card |
+| `text-muted-dark` | `#b4aea5` | 7.0:1 on card, 5.9:1 on a column |
+| `border-subtle-dark` | `#2e4159` | |
+| `brand-primary-dark` | `#6db3f8` | 6.9:1 on card (text, icons, focus rings) |
+| `brand-accent-dark` | `#9ccbfa` | 9.0:1 on card (links) |
+| `type-feature-dark` | `#b3a8f5` | 7.2:1 on card |
+| `type-bug-dark` | `#ff9c8f` | 7.6:1 on card |
+| `due-overdue-dark` / `due-overdue-ink-dark` | `#4a1f1d` / `#ffb8ae` | 8.5:1 |
+| `due-warning-dark` / `due-warning-ink-dark` | `#3d2f0d` / `#f3cf75` | 8.7:1 |
+| `due-neutral-dark` / `due-neutral-ink-dark` | `#2e4159` / `#d3cec6` | 6.7:1 |
+| `due-safe-dark` / `due-safe-ink-dark` | `#123a2b` / `#86dcac` | 7.7:1 |
+
 ## 3. Typography
 
 | Role | Font | Why |
@@ -92,7 +112,7 @@ One short sentence per element. These set the tone for the build phase — Perso
 - **Buttons:** Solid `brand-primary` with white text (4.51:1, passes WCAG AA), rounded-md, at least 44 px tall for an easy target, with a visible focus ring for keyboard users.
 - **Modal:** Centred, max-w-md, `text-primary` backdrop at 50% opacity, focus moves into the modal when it opens and Escape closes it, so keyboard and screen reader users are never trapped.
 - **Empty states:** Dashed border with one short plain sentence, so an empty column is explained in words rather than just looking blank.
-- **Drag affordance (if used):** None. We use a status dropdown, which works with a keyboard and screen readers where drag and drop often does not.
+- **Drag affordance (if used):** Added in M12. Cards can be dragged to another column with the mouse (browser drag and drop, no library); the card fades while dragged and the column under it gets a `brand-primary` outline. The status dropdown stays as the way to move a task by keyboard or screen reader, where drag and drop often does not work.
 
 ## 5. Voice / microcopy
 
@@ -100,7 +120,7 @@ Three lines of microcopy that capture the tone of the product. Keep it short —
 
 | Where | Text |
 |---|---|
-| "+" button label | + Add task |
+| "+" button label | Add task (with a plus icon in place of the "+") |
 | Empty column placeholder | Nothing here yet. |
 | Toast after "Copy as Prompt Context" | Copied. Paste it into your AI tool. |
 | Confirm-delete message | Delete this task? This cannot be undone. |
@@ -117,7 +137,7 @@ The tracker probably doesn't need a logo, but it does need a name and a wordmark
 
 To keep design tight, the following are explicitly not part of `design-done`:
 
-- A dark mode toggle. Pick one mode and ship it.
+- ~~A dark mode toggle. Pick one mode and ship it.~~ Added after M11, see §2 Dark mode.
 - Multiple themes. One brand, applied consistently.
 - Animations beyond a 200 ms fade on toast notifications.
 - A custom icon set. Use [Lucide icons](https://lucide.dev) via Tailwind classes if you need any.
