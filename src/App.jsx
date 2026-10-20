@@ -32,6 +32,9 @@ import { getDueState, dueLabel } from './dueState';
  * @property {string} assignee
  * @property {string|null} dueDate     ISO 'YYYY-MM-DD', or 'YYYY-MM-DDTHH:mm' with a time
  * @property {string} createdDate      ISO 'YYYY-MM-DD'
+ * @property {string} context          M9: Markdown briefing for the next AI tool or teammate
+ * @property {string|null} contextTool M9: one of CONTEXT_TOOLS, or null
+ * @property {string|null} contextUpdatedAt M9: ISO timestamp, set only when the context text changes
  */
 
 // The four columns of the board, in render order.
@@ -81,6 +84,41 @@ export const TASK_TYPES = {
     ),
   },
 };
+
+// The AI tools a task's context can be written for (PRD §5, M9).
+export const CONTEXT_TOOLS = ['Claude', 'ChatGPT', 'Cursor', 'Lovable', 'Replit', 'Other'];
+
+// Where "Open in [tool]" goes for each AI tool. Tools with a `promptUrl` take the
+// context in the link. The others only open `url`. To add a tool, add a line here.
+const AI_TOOL_LINKS = {
+  Claude: { url: 'https://claude.ai/new', promptUrl: 'https://claude.ai/new?q=' },
+  ChatGPT: { url: 'https://chatgpt.com/', promptUrl: 'https://chatgpt.com/?q=' },
+  Cursor: { url: 'https://cursor.com/', promptUrl: 'https://cursor.com/link/prompt?text=' },
+  Lovable: { url: 'https://lovable.dev/' },
+  Replit: { url: 'https://replit.com/' },
+};
+
+// Longer links can be cut off by browsers or the tool, so past this the tool opens without the text.
+const MAX_LINK_LENGTH = 7000;
+
+// The link for "Open in [tool]", or null if the tool has no link (Other or None).
+// `tooLong` is true when the context did not fit in the link.
+function aiToolLink(tool, context) {
+  const link = AI_TOOL_LINKS[tool];
+  if (!link) return null;
+  if (!link.promptUrl) return { href: link.url, tooLong: false };
+  const fullUrl = link.promptUrl + encodeURIComponent(context);
+  return fullUrl.length > MAX_LINK_LENGTH
+    ? { href: link.url, tooLong: true }
+    : { href: fullUrl, tooLong: false };
+}
+
+// The starting text for a new task's Context field.
+const CONTEXT_TEMPLATE = '## Background\n\n## Constraints\n\n## Tried so far\n\n## Pick up\n';
+
+// Tasks saved before M9 have no context fields. These defaults fill them in
+// when a task is opened, so old tasks still work.
+const CONTEXT_DEFAULTS = { context: '', contextTool: null, contextUpdatedAt: null };
 
 // Colour, icon and legend text for each due state (DESIGN.md §2, M8), in legend order.
 // getDueState() in dueState.js picks the state. Green is kept for Done only,
@@ -189,6 +227,7 @@ function makeSeedTasks() {
       assignee: TEAM[2],
       dueDate: daysFromToday(5),
       createdDate: daysFromToday(-2),
+      ...CONTEXT_DEFAULTS,
     },
     {
       id: 'seed-2',
@@ -199,6 +238,14 @@ function makeSeedTasks() {
       assignee: TEAM[0],
       dueDate: daysFromToday(0),
       createdDate: daysFromToday(-3),
+      // An example of a filled-in context, last updated 2 hours before first load.
+      context:
+        '## Background\nOne modal for adding and editing tasks, opened from "+ Add task" or a card.\n\n' +
+        '## Constraints\nReact + Tailwind only. Use the DESIGN.md tokens. No new packages.\n\n' +
+        '## Tried so far\nAdd works. Edit opens the right task but Cancel still saves changes.\n\n' +
+        '## Pick up\nMake the modal edit a draft copy, so nothing changes until Save is pressed.\n',
+      contextTool: 'Claude',
+      contextUpdatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     },
     {
       id: 'seed-3',
@@ -209,6 +256,7 @@ function makeSeedTasks() {
       assignee: TEAM[1],
       dueDate: daysFromToday(-1),
       createdDate: daysFromToday(-4),
+      ...CONTEXT_DEFAULTS,
     },
     {
       id: 'seed-4',
@@ -219,6 +267,7 @@ function makeSeedTasks() {
       assignee: TEAM[3],
       dueDate: daysFromToday(-3),
       createdDate: daysFromToday(-6),
+      ...CONTEXT_DEFAULTS,
     },
   ];
 }
@@ -289,6 +338,8 @@ export default function App() {
       assignee: team[0].name,
       dueDate: null,
       createdDate: daysFromToday(0),
+      ...CONTEXT_DEFAULTS,
+      context: CONTEXT_TEMPLATE,
     });
   }
 
@@ -382,6 +433,7 @@ export default function App() {
           task={editing}
           isNew={!tasks.some((task) => task.id === editing.id)}
           team={team}
+          now={now}
           onSave={saveTask}
           onHandOff={handOffTask}
           onDelete={deleteTask}
@@ -420,6 +472,9 @@ const primaryButtonClass = `${buttonBaseClass} bg-brand-primary text-white hover
 const secondaryButtonClass = `${buttonBaseClass} border border-border-subtle bg-surface-card hover:border-text-muted`;
 const dangerButtonClass = `${buttonBaseClass} border border-type-bug bg-surface-card text-type-bug hover:bg-due-overdue`;
 const confirmDeleteButtonClass = `${buttonBaseClass} bg-type-bug text-white hover:opacity-90`;
+// A lighter button for small actions next to a field: small text and no border, but still 44 px tall.
+const smallButtonClass =
+  'inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-xs font-medium text-brand-primary hover:bg-brand-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary';
 const fieldClass =
   'mt-1 w-full rounded-md border border-border-subtle bg-surface-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary';
 
@@ -583,6 +638,42 @@ function SwapIcon() {
   );
 }
 
+// A small line icon in the text colour. Decorative only: the button text next to it says what it does.
+function Icon({ children }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="h-4 w-4 shrink-0"
+    >
+      {children}
+    </svg>
+  );
+}
+
+// Three blocks on a page (Lucide layout-template), for "Use template".
+const TEMPLATE_ICON = (
+  <>
+    <rect width="18" height="7" x="3" y="3" rx="1" />
+    <rect width="9" height="7" x="3" y="14" rx="1" />
+    <rect width="5" height="7" x="16" y="14" rx="1" />
+  </>
+);
+
+// A box with an arrow leaving it (Lucide external-link), for "Open in [tool]".
+const EXTERNAL_LINK_ICON = (
+  <>
+    <path d="M15 3h6v6" />
+    <path d="M10 14 21 3" />
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+  </>
+);
+
 // Shows an ISO 'YYYY-MM-DD' date as e.g. '20 October 2026'.
 function formatDate(isoDate) {
   return new Date(`${isoDate}T00:00`).toLocaleDateString('en-GB', {
@@ -592,28 +683,69 @@ function formatDate(isoDate) {
   });
 }
 
+// Shows how long ago an ISO timestamp was, e.g. '2 hours ago' or 'just now'.
+function timeAgo(isoTime, now) {
+  const seconds = Math.round((new Date(isoTime) - now) / 1000); // negative = in the past
+  if (seconds > -60) return 'just now';
+  const units = [
+    ['year', 365 * 24 * 60 * 60],
+    ['month', 30 * 24 * 60 * 60],
+    ['week', 7 * 24 * 60 * 60],
+    ['day', 24 * 60 * 60],
+    ['hour', 60 * 60],
+    ['minute', 60],
+  ];
+  const [unit, size] = units.find(([, size]) => Math.abs(seconds) >= size);
+  return new Intl.RelativeTimeFormat('en-GB', { numeric: 'auto' }).format(
+    Math.round(seconds / size),
+    unit
+  );
+}
+
 // One modal for adding and editing a task. It edits a draft copy,
 // so nothing changes on the board until Save is pressed.
-function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) {
-  const [draft, setDraft] = useState(task);
+function TaskModal({ task, isNew, team, now, onSave, onHandOff, onDelete, onClose }) {
+  // Older tasks may not have the context fields yet, so fill in the defaults first.
+  const [draft, setDraft] = useState({ ...CONTEXT_DEFAULTS, ...task });
+  // The context as it was when the modal opened, to tell if it has been edited.
+  const savedContext = task.context ?? '';
+  const contextChanged = draft.context !== savedContext;
   const [error, setError] = useState('');
   // True while the "Delete this task?" message is showing.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // True while the "Replace your context with the template?" message is showing.
+  const [confirmingTemplate, setConfirmingTemplate] = useState(false);
 
-  // Escape backs out of the delete message first, otherwise closes the modal without saving.
+  // Escape backs out of an open message first, otherwise closes the modal without saving.
   useEffect(() => {
     function handleKeyDown(event) {
       if (event.key !== 'Escape') return;
       if (confirmingDelete) setConfirmingDelete(false);
+      else if (confirmingTemplate) setConfirmingTemplate(false);
       else onClose();
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [confirmingDelete, onClose]);
+  }, [confirmingDelete, confirmingTemplate, onClose]);
 
   function update(field, value) {
     setDraft({ ...draft, [field]: value });
   }
+
+  // Puts the template in the Context field. If that would replace the user's own text,
+  // it shows a small "Replace your context?" message in the modal first.
+  function applyTemplate() {
+    const hasOwnText = draft.context.trim() !== '' && draft.context !== CONTEXT_TEMPLATE;
+    if (hasOwnText) setConfirmingTemplate(true);
+    else update('context', CONTEXT_TEMPLATE);
+  }
+
+  function replaceWithTemplate() {
+    update('context', CONTEXT_TEMPLATE);
+    setConfirmingTemplate(false);
+  }
+
+  const toolLink = aiToolLink(draft.contextTool, draft.context);
 
   // dueDate holds the date and the optional time together, e.g. '2026-10-20T14:30'.
   // The modal shows them as two inputs, so split it here and join it back on change.
@@ -626,13 +758,15 @@ function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) 
   }
 
   // The draft with a tidied title, or null (and an error message) if the title is empty.
+  // contextUpdatedAt only moves on when the context text itself has changed.
   function checkedDraft() {
     const title = draft.title.trim();
     if (!title) {
       setError('Please add a title.');
       return null;
     }
-    return { ...draft, title };
+    const contextUpdatedAt = contextChanged ? new Date().toISOString() : draft.contextUpdatedAt;
+    return { ...draft, title, contextUpdatedAt };
   }
 
   function handleSubmit(event) {
@@ -661,7 +795,7 @@ function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) 
         aria-modal="true"
         aria-labelledby="task-modal-heading"
         onSubmit={handleSubmit}
-        className={`flex w-full max-w-md flex-col gap-4 rounded-lg border-t-8 bg-surface-card p-6 ${taskTypeStyle(draft.type).topStripeClass}`}
+        className={`flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg border-t-8 bg-surface-card p-6 ${taskTypeStyle(draft.type).topStripeClass}`}
       >
         <div className="flex items-center justify-between gap-2">
           <h2 id="task-modal-heading" className="text-lg font-semibold">
@@ -750,52 +884,26 @@ function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) 
               ))}
             </select>
           </label>
-
-          {/* A new task picks its first owner here. An existing task changes owner
-              through the Owner box below. */}
-          {isNew && (
-            <label className="block text-sm font-medium">
-              Assignee
-              <select
-                value={draft.assignee}
-                onChange={(event) => update('assignee', event.target.value)}
-                className={fieldClass}
-              >
-                {team.map((member) => (
-                  <option key={member.name} value={member.name}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {/* Date and an optional time. With no time, the task is due at the end of the day. */}
-          <fieldset className="col-span-2 text-sm font-medium">
-            <legend>Due</legend>
-            <div className="grid grid-cols-2 gap-4">
-              <label className="block text-xs font-normal text-text-muted">
-                Date
-                <input
-                  type="date"
-                  value={dueDay}
-                  onChange={(event) => updateDue(event.target.value, dueTime)}
-                  className={`${fieldClass} text-text-primary`}
-                />
-              </label>
-              <label className="block text-xs font-normal text-text-muted">
-                Time (optional)
-                <input
-                  type="time"
-                  value={dueTime}
-                  onChange={(event) => updateDue(dueDay, event.target.value)}
-                  disabled={!dueDay}
-                  className={`${fieldClass} text-text-primary disabled:cursor-not-allowed disabled:text-text-muted`}
-                />
-              </label>
-            </div>
-          </fieldset>
         </div>
+
+        {/* A new task picks its first owner here. An existing task changes owner
+            through the Owner box instead. */}
+        {isNew && (
+          <label className="block text-sm font-medium">
+            Assignee
+            <select
+              value={draft.assignee}
+              onChange={(event) => update('assignee', event.target.value)}
+              className={fieldClass}
+            >
+              {team.map((member) => (
+                <option key={member.name} value={member.name}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {/* Owner box: who has the task now, a swap icon, then who to hand it to. */}
         {!isNew && (
@@ -831,6 +939,128 @@ function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) 
             </div>
           </fieldset>
         )}
+
+        {/* The briefing to paste into an AI tool or pass to a teammate. */}
+        <div>
+          <div className="flex items-end justify-between gap-2">
+            <label htmlFor="task-context" className="text-sm font-medium">
+              Context
+              <span className="ml-2 text-xs font-normal text-text-muted">Markdown supported</span>
+            </label>
+            <button type="button" onClick={applyTemplate} className={smallButtonClass}>
+              <Icon>{TEMPLATE_ICON}</Icon>
+              Use template
+            </button>
+          </div>
+          {confirmingTemplate && (
+            <div
+              role="alertdialog"
+              aria-labelledby="template-confirm-text"
+              className="mt-1 flex flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-surface-page p-2"
+            >
+              <p id="template-confirm-text" className="flex-1 text-xs">
+                Replace your context with the template?
+              </p>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setConfirmingTemplate(false)}
+                className={smallButtonClass}
+              >
+                Keep my text
+              </button>
+              <button type="button" onClick={replaceWithTemplate} className={smallButtonClass}>
+                Replace
+              </button>
+            </div>
+          )}
+          <textarea
+            id="task-context"
+            rows={8}
+            value={draft.context}
+            onChange={(event) => update('context', event.target.value)}
+            aria-describedby="task-context-updated"
+            className={`${fieldClass} font-mono`}
+          />
+          <p id="task-context-updated" className="mt-1 text-xs text-text-muted">
+            {draft.contextUpdatedAt ? (
+              <time
+                dateTime={draft.contextUpdatedAt}
+                title={new Date(draft.contextUpdatedAt).toLocaleString('en-GB')}
+              >
+                Last updated {timeAgo(draft.contextUpdatedAt, now)}
+              </time>
+            ) : (
+              'Not updated yet'
+            )}
+            {contextChanged && ' (unsaved changes)'}
+          </p>
+        </div>
+
+        {/* The AI tool, plus a link to open it when the tool has one in AI_TOOL_LINKS. */}
+        <div>
+          <div className="flex items-end gap-2">
+            <label className="block flex-1 text-sm font-medium">
+              AI tool (optional)
+              <select
+                value={draft.contextTool ?? ''}
+                onChange={(event) => update('contextTool', event.target.value || null)}
+                className={fieldClass}
+              >
+                <option value="">None</option>
+                {CONTEXT_TOOLS.map((tool) => (
+                  <option key={tool} value={tool}>
+                    {tool}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {toolLink && (
+              <a
+                href={toolLink.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
+              >
+                <Icon>{EXTERNAL_LINK_ICON}</Icon>
+                Open in {draft.contextTool}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            )}
+          </div>
+          {toolLink?.tooLong && (
+            <p className="mt-1 text-xs text-text-muted">
+              Too long for a link, so {draft.contextTool} opens without your text. Copy the context
+              and paste it in.
+            </p>
+          )}
+        </div>
+
+        {/* Date and an optional time. With no time, the task is due at the end of the day. */}
+        <fieldset className="text-sm font-medium">
+          <legend>Due</legend>
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block text-xs font-normal text-text-muted">
+              Date
+              <input
+                type="date"
+                value={dueDay}
+                onChange={(event) => updateDue(event.target.value, dueTime)}
+                className={`${fieldClass} text-text-primary`}
+              />
+            </label>
+            <label className="block text-xs font-normal text-text-muted">
+              Time (optional)
+              <input
+                type="time"
+                value={dueTime}
+                onChange={(event) => updateDue(dueDay, event.target.value)}
+                disabled={!dueDay}
+                className={`${fieldClass} text-text-primary disabled:cursor-not-allowed disabled:text-text-muted`}
+              />
+            </label>
+          </div>
+        </fieldset>
 
         <p className="text-sm text-text-muted">Created {formatDate(draft.createdDate)}</p>
 

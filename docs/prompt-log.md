@@ -344,3 +344,70 @@ Tools used across the project (fill in as you go):
 
 
 ---
+
+### M09 · task-context · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @milestones/M09-task-context.md and PRD.md section 5 (context, contextTool, contextUpdatedAt).
+   Add a labelled "Context" Markdown textarea to the task modal, with an optional
+   "AI tool" dropdown below it (Claude, ChatGPT, Cursor, Lovable, Replit, Other).
+   New tasks get this template in the context field:
+   ## Background
+   ## Constraints
+   ## Tried so far
+   ## Pick up
+   Set contextUpdatedAt to the current ISO time only when the context text actually
+   changes on save (not on every save). Show "last updated X ago" under the field.
+   Existing tasks without these fields must still load without errors.
+   Plan first. Don't do the stretch preview yet.
+   ```
+2. im happy for time stamp to be blank, yeah
+3. Rearrange the edit and create modal Title top definetely i think then type status and owner then context ai tool and due
+4. can u put a use temblate button above the context field which then puts in the create placeholder text
+
+   ```
+   In the task detail panel, next to the Context field, add two buttons: "Copy" and "Open in [tool]".
+
+   - Copy: copies the Context text to the clipboard and shows "Copied" for 2 seconds.
+   - Open in [tool]: only shown when the AI tool is ChatGPT, Claude or Cursor.
+     It always copies the text first, then opens the tool in a new tab using:
+     - ChatGPT: https://chatgpt.com/?q=
+     - Claude: https://claude.ai/new?q=
+     - Cursor: https://cursor.com/link/prompt?text=
+     Encode the text with encodeURIComponent.
+     If the full URL is over 7,000 characters, open the base URL with no text instead
+     and show "Too long for a link, it's on your clipboard, just paste".
+   - For Claude Code, Copilot, Other or None, only show Copy.
+
+   Keep the tool URLs in one small config object so I can add tools later.
+   ```
+
+   For the other tools that are listed just find the generic link for them ignore the copy bit for now
+5. The use template i dont want the browser warning i also what use template smaller with an icon that matches it as well as open in i want an icon
+
+**Files changed:**
+- `src/App.jsx`: `CONTEXT_TOOLS`, `CONTEXT_TEMPLATE` and `CONTEXT_DEFAULTS` constants; new tasks start with the template; the modal fills in missing context fields for older tasks; a "Context" Markdown textarea with a "Last updated X ago" hint (or "Not updated yet", plus "(unsaved changes)" while edited) and an "AI tool (optional)" dropdown; `contextUpdatedAt` is only set on Save or Hand off when the context text differs from when the modal opened, so an untouched template stays blank; `timeAgo()` helper using the built-in `Intl.RelativeTimeFormat`; the modal now scrolls inside itself when taller than the screen; seed task 2 has an example context; `Task` JSDoc lists the new fields
+- `src/App.jsx` (prompt 3): modal fields reordered to Title, Description, Type and Status, Assignee (new task) or Owner box (existing task), Context, AI tool, Due
+- `src/App.jsx` (prompt 4): "Use template" button above Context (asks before replacing your own text); `AI_TOOL_LINKS` config and `aiToolLink()`; an "Open in [tool]" link next to the AI tool dropdown for Claude, ChatGPT and Cursor (context passed in the link) and Lovable and Replit (home page only); links over 7,000 characters open the tool without the text and show a message. No Copy button or clipboard code yet (left for M10)
+- `src/App.jsx` (prompt 5): the browser pop-up for "Use template" replaced by a small in-modal message ("Keep my text" / "Replace", Escape closes it); "Use template" is now a smaller borderless button (`smallButtonClass`) with a template icon; "Open in [tool]" has an external-link icon; new `Icon` component with Lucide `layout-template` and `external-link` paths
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M09-context.png`
+
+**Notes for report:**
+
+
+---
