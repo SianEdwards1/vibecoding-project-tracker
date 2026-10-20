@@ -26,13 +26,13 @@ export default {
         },
         due: {
           // M8 due-tint: each tint has an ink colour for text, icons or borders on it
-          safe: '#def4e7',    // more than 2 days out
+          safe: '#def4e7',    // done
           'safe-ink': '#177a4c',
-          warning: '#fdefd0', // less than 24 hours
+          warning: '#fdefd0', // due soon, less than 3 days left
           'warning-ink': '#8a5a00',
           overdue: '#fde3e0', // past due
           'overdue-ink': '#b42318',
-          neutral: '#ece7df', // done
+          neutral: '#ece7df', // due in 3+ days
           'neutral-ink': '#5a5758',
         },
         avatar: {

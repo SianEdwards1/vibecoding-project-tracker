@@ -287,3 +287,60 @@ Tools used across the project (fill in as you go):
 
 
 ---
+
+### M08 · due-tint · 2026-10-20
+
+**AI tool:** Claude Code
+
+**Prompts (word for word):**
+1. ```
+   Read @milestones/M08-due-tint.md and the due-* tokens in @tailwind.config.js.
+   Write one function getDueState(task, now) that returns 'calm' | 'warning' | 'alarm' | 'neutral':
+   - status done → neutral (always, even if overdue)
+   - past due → alarm
+   - less than 24h → warning
+   - 24h to 2 days → calm
+   - more than 2 days → calm
+   - no due date → neutral
+
+   Don't tint the whole card. Instead, add a small due badge on each card: a pill-shaped
+   chip with a clock icon and text like "Due in 3h", "Due in 2 days" or "Overdue by 1 day".
+   Colour the chip (background or border plus icon) using the due-* token for its state.
+   Neutral cards with no due date show no chip; done cards can show the date in the
+   neutral colour. The rest of the card keeps its normal styling.
+
+   Add a small legend above the board showing each chip colour and what it means.
+
+   Then add a few quick tests or a console check that runs getDueState on example
+   dates around each boundary and show me the results.
+   ```
+2. If its in done change the chip to say done with a green. I want Overdue Due soon, Due in 3+ days and i also want to be able to add times the done chip should be green
+3. (Answers picked from Claude's multiple-choice questions) Due time: "Optional time in dueDate (Recommended)". Due soon: "Amber for anything before 3 days, then for 3 days or more change the colour to not be green as done is green". Done chip: "Same green, tick icon (Recommended)".
+
+**Files changed:**
+- `src/dueState.js` (new): `getDueState(task, now)`, `dueLabel(task, now)` for the chip text, and `dueDeadline(dueDate)`. A date-only due date counts as due at the end of that day, local time
+- `src/App.jsx`: `DUE_STATES` (colour classes and meaning per state), `DueChip` (pill with clock icon) shown on each card that has a due date, `DueLegend` above the board, and a `now` clock in `App` that refreshes every minute so chips update on their own
+- `scripts/check-due-state.mjs` (new): 13 boundary checks for `getDueState`, printed as a table
+- `package.json`: `check:due` script to run the checks (no new packages)
+- `src/dueState.js`, `src/App.jsx` (prompts 2 and 3): "Due soon" now means less than 3 days left; legend reads Overdue (red), Due soon (amber), Due in 3+ days (grey `due-neutral`), Done (green `due-safe` with a tick icon); every done task shows a "Done" chip; the modal's due date is now a "Due" group with Date and an optional Time, saved together in `dueDate` as 'YYYY-MM-DDTHH:mm'; no time still means due at the end of the day
+- `scripts/check-due-state.mjs` (prompts 2 and 3): checks updated for the 3-day boundary, times and Done (15 checks)
+- `PRD.md`: section 5 `dueDate` format now allows an optional time
+- `DESIGN.md`, `tailwind.config.js`: due token descriptions updated to the new meanings
+- `docs/prompt-log.md`: this entry
+
+**What I checked:**
+- [ ] Done-when list ticked in the browser
+- [ ] `npm run build` passed
+
+**What I changed or rejected (and why):**
+
+
+**Requirement ID(s) this relates to:**
+
+
+**Screenshots:** `docs/screenshots/M08-due.png`
+
+**Notes for report:**
+
+
+---

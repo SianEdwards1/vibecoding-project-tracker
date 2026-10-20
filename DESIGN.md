@@ -50,10 +50,12 @@ These are the colors the build milestones will reference. Once chosen, paste the
 
 | Token | Hex | Ink token | Ink hex | When used |
 |---|---|---|---|---|
-| `due-safe` | `#def4e7` | `due-safe-ink` | `#177a4c` | More than 2 days out |
-| `due-warning` | `#fdefd0` | `due-warning-ink` | `#8a5a00` | Less than 24 hours |
-| `due-overdue` | `#fde3e0` | `due-overdue-ink` | `#b42318` | Past due |
-| `due-neutral` | `#ece7df` | `due-neutral-ink` | `#5a5758` | Done (overrides date) |
+| `due-overdue` | `#fde3e0` | `due-overdue-ink` | `#b42318` | Overdue: past due |
+| `due-warning` | `#fdefd0` | `due-warning-ink` | `#8a5a00` | Due soon: less than 3 days left |
+| `due-neutral` | `#ece7df` | `due-neutral-ink` | `#5a5758` | Due in 3+ days |
+| `due-safe` | `#def4e7` | `due-safe-ink` | `#177a4c` | Done (overrides date), with a tick icon |
+
+Green is kept for Done only, so tasks with plenty of time use the calm grey. A due date with no time counts as due at the end of that day.
 
 ### Teammate avatars (M7 `task-owner`)
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getDueState, dueLabel } from './dueState';
 
 /**
  * Vibecoding Project Tracker — starter scaffold.
@@ -29,7 +30,7 @@ import { useState, useEffect } from 'react';
  * @property {'feature'|'bug'} type
  * @property {'todo'|'in-progress'|'review'|'done'} status
  * @property {string} assignee
- * @property {string|null} dueDate     ISO 'YYYY-MM-DD'
+ * @property {string|null} dueDate     ISO 'YYYY-MM-DD', or 'YYYY-MM-DDTHH:mm' with a time
  * @property {string} createdDate      ISO 'YYYY-MM-DD'
  */
 
@@ -78,6 +79,40 @@ export const TASK_TYPES = {
         <path d="M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4" />
       </>
     ),
+  },
+};
+
+// Colour, icon and legend text for each due state (DESIGN.md §2, M8), in legend order.
+// getDueState() in dueState.js picks the state. Green is kept for Done only,
+// so "Due in 3+ days" uses the grey neutral tokens.
+// Class names are written out in full for Tailwind.
+const CLOCK_ICON = (
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 6v6l4 2" />
+  </>
+);
+const DUE_STATES = {
+  alarm: {
+    meaning: 'Overdue',
+    chipClass: 'border-due-overdue-ink/40 bg-due-overdue text-due-overdue-ink',
+    icon: CLOCK_ICON,
+  },
+  warning: {
+    meaning: 'Due soon',
+    chipClass: 'border-due-warning-ink/40 bg-due-warning text-due-warning-ink',
+    icon: CLOCK_ICON,
+  },
+  calm: {
+    meaning: 'Due in 3+ days',
+    chipClass: 'border-due-neutral-ink/40 bg-due-neutral text-due-neutral-ink',
+    icon: CLOCK_ICON,
+  },
+  neutral: {
+    meaning: 'Done',
+    chipClass: 'border-due-safe-ink/40 bg-due-safe text-due-safe-ink',
+    // A tick, so Done is not told apart by colour alone.
+    icon: <path d="M20 6 9 17l-5-5" />,
   },
 };
 
@@ -228,6 +263,13 @@ export default function App() {
   // True while the Team panel is open.
   const [showingTeam, setShowingTeam] = useState(false);
 
+  // The current time, refreshed every minute so the due chips update on their own.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   function addTeammate(name) {
     setTeam([...team, { name, colour: nextAvatarColour(team) }]);
   }
@@ -318,6 +360,8 @@ export default function App() {
 
       {/* TODO M11 anchors: render the Anchor Board (Presentation / Demo / Report / Documentation) above the board. */}
 
+      <DueLegend />
+
       <main className="grid grid-cols-4 gap-4">
         {STAGES.map((stage) => (
           <Column
@@ -325,6 +369,7 @@ export default function App() {
             label={stage.label}
             tasks={tasks.filter((task) => task.status === stage.id)}
             team={team}
+            now={now}
             onOpen={setEditing}
           />
         ))}
@@ -379,7 +424,7 @@ const fieldClass =
   'mt-1 w-full rounded-md border border-border-subtle bg-surface-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary';
 
 // One board column: a heading with a count, then its task cards.
-function Column({ label, tasks, team, onOpen }) {
+function Column({ label, tasks, team, now, onOpen }) {
   return (
     <section className="flex min-h-64 flex-col gap-3 rounded-lg bg-border-subtle/60 p-3">
       <h2 className="flex items-baseline justify-between border-b border-text-muted/20 pb-2 text-base font-semibold uppercase">
@@ -394,7 +439,7 @@ function Column({ label, tasks, team, onOpen }) {
         </p>
       ) : (
         tasks.map((task) => (
-          <TaskCard key={task.id} task={task} team={team} onOpen={() => onOpen(task)} />
+          <TaskCard key={task.id} task={task} team={team} now={now} onOpen={() => onOpen(task)} />
         ))
       )}
     </section>
@@ -436,8 +481,10 @@ function TypeBadge({ type }) {
 
 // A single task card. It is a button so it can be opened with a mouse or the keyboard.
 // The coloured left stripe and corner icon show the task type.
-function TaskCard({ task, team, onOpen }) {
+// The due chip shows how soon it is due, or "Done". Unfinished tasks with no due date have no chip.
+function TaskCard({ task, team, now, onOpen }) {
   const style = taskTypeStyle(task.type);
+  const dueText = dueLabel(task, now);
   return (
     <button
       type="button"
@@ -450,9 +497,57 @@ function TaskCard({ task, team, onOpen }) {
           <Avatar name={task.assignee} team={team} />
           {task.assignee}
         </span>
+        {dueText && (
+          <span className="mt-2 block">
+            <DueChip state={getDueState(task, now)}>{dueText}</DueChip>
+          </span>
+        )}
       </span>
       <TypeIcon type={task.type} />
     </button>
+  );
+}
+
+// A small pill with an icon, coloured for the due state.
+// The text always says the state too, so it never relies on colour alone.
+function DueChip({ state, children }) {
+  const style = DUE_STATES[state];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-xs ${style.chipClass}`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className="h-3.5 w-3.5 shrink-0"
+      >
+        {style.icon}
+      </svg>
+      {children}
+    </span>
+  );
+}
+
+// The key above the board: one chip per due state and what it means.
+function DueLegend() {
+  return (
+    <section
+      aria-label="Due date key"
+      className="mb-4 flex flex-wrap items-center gap-2 text-xs text-text-muted"
+    >
+      <span className="font-medium">Due dates:</span>
+      {Object.entries(DUE_STATES).map(([state, { meaning }]) => (
+        <DueChip key={state} state={state}>
+          {meaning}
+        </DueChip>
+      ))}
+      <span>No chip means no due date. Dates with no time are due at the end of the day.</span>
+    </section>
   );
 }
 
@@ -518,6 +613,16 @@ function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) 
 
   function update(field, value) {
     setDraft({ ...draft, [field]: value });
+  }
+
+  // dueDate holds the date and the optional time together, e.g. '2026-10-20T14:30'.
+  // The modal shows them as two inputs, so split it here and join it back on change.
+  const [dueDay, dueTime = ''] = (draft.dueDate ?? '').split('T');
+
+  function updateDue(day, time) {
+    // An empty date input gives '', which is saved as null (no due date, so no time either).
+    if (!day) update('dueDate', null);
+    else update('dueDate', time ? `${day}T${time}` : day);
   }
 
   // The draft with a tidied title, or null (and an error message) if the title is empty.
@@ -665,16 +770,31 @@ function TaskModal({ task, isNew, team, onSave, onHandOff, onDelete, onClose }) 
             </label>
           )}
 
-          <label className="block text-sm font-medium">
-            Due date
-            <input
-              type="date"
-              value={draft.dueDate ?? ''}
-              // An empty date input gives '', which is saved as null (no due date).
-              onChange={(event) => update('dueDate', event.target.value || null)}
-              className={fieldClass}
-            />
-          </label>
+          {/* Date and an optional time. With no time, the task is due at the end of the day. */}
+          <fieldset className="col-span-2 text-sm font-medium">
+            <legend>Due</legend>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="block text-xs font-normal text-text-muted">
+                Date
+                <input
+                  type="date"
+                  value={dueDay}
+                  onChange={(event) => updateDue(event.target.value, dueTime)}
+                  className={`${fieldClass} text-text-primary`}
+                />
+              </label>
+              <label className="block text-xs font-normal text-text-muted">
+                Time (optional)
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(event) => updateDue(dueDay, event.target.value)}
+                  disabled={!dueDay}
+                  className={`${fieldClass} text-text-primary disabled:cursor-not-allowed disabled:text-text-muted`}
+                />
+              </label>
+            </div>
+          </fieldset>
         </div>
 
         {/* Owner box: who has the task now, a swap icon, then who to hand it to. */}

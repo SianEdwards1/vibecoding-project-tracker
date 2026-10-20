@@ -51,7 +51,7 @@ Task = {
   type: 'feature' | 'bug',       // visual color coding
   status: 'todo' | 'in-progress' | 'review' | 'done',
   assignee: string,              // one of the three teammate names from §8
-  dueDate: string | null,        // ISO date 'YYYY-MM-DD'
+  dueDate: string | null,        // ISO date 'YYYY-MM-DD', or 'YYYY-MM-DDTHH:mm' with an optional time (M8)
   createdDate: string,           // ISO date 'YYYY-MM-DD'
 
   // Added in later milestones:
