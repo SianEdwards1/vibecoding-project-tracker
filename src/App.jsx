@@ -1254,20 +1254,13 @@ function DueChip({ state, children }) {
   );
 }
 
-// The due-date key along the bottom of the filter pane. It explains the chips on the cards,
-// and each chip is also a filter button: press one to show only tasks with that chip.
+// The options under the "Due dates" filter button: the due-date key, where each chip is
+// also a filter button. Press one to show only tasks with that chip on their card.
 // More than one can be on. A switched-on chip gets a solid outline in its own ink colour
 // and bold text, so it doesn't rely on colour alone.
-function DueKeyFilter({ selected, onToggle }) {
+function DueKeyChips({ selected, onToggle }) {
   return (
-    <div
-      role="group"
-      aria-labelledby="due-key-label"
-      className="mt-1 flex flex-wrap items-center gap-x-1 border-t border-border-subtle pt-1 text-xs text-text-muted dark:border-border-subtle-dark dark:text-text-muted-dark"
-    >
-      <span id="due-key-label" className="mr-1 font-medium">
-        Due dates:
-      </span>
+    <>
       {Object.entries(DUE_STATES).map(([state, style]) => {
         const pressed = selected.includes(state);
         return (
@@ -1292,20 +1285,19 @@ function DueKeyFilter({ selected, onToggle }) {
           </button>
         );
       })}
-      <span className="ml-1">
+      <span className="ml-1 text-xs text-text-muted dark:text-text-muted-dark">
         No chip means no due date. Dates with no time are due at the end of the day.
       </span>
-    </div>
+    </>
   );
 }
 
-// The filter bar above the board (M12): person, type and AI tool, how many tasks are
-// showing, and the clickable due-date key along the bottom.
-// Each filter is a button that opens its options underneath, one at a time.
+// The filter bar above the board (M12): person, type, due dates and AI tool, and how many
+// tasks are showing. Each filter is a button that opens its options underneath, one at a time.
 // Each option is a toggle button, and a switched-on one gets a tick and a stronger
 // border as well as a tint, so it doesn't rely on colour alone.
 function FilterBar({ filters, team, shown, total, onChange }) {
-  // Which filter's options are open: 'person', 'type', 'tool', or null for none.
+  // Which filter's options are open: 'person', 'type', 'due', 'tool', or null for none.
   const [open, setOpen] = useState(null);
 
   // Clearing removes the "Clear filters" button, so focus moves to the first filter
@@ -1326,6 +1318,7 @@ function FilterBar({ filters, team, shown, total, onChange }) {
   const groups = [
     { id: 'person', label: 'Person', active: filters.people.length },
     { id: 'type', label: 'Type', active: filters.types.length },
+    { id: 'due', label: 'Due dates', active: filters.due.length },
     { id: 'tool', label: 'AI tool', active: filters.tools.length },
   ];
 
@@ -1407,6 +1400,16 @@ function FilterBar({ filters, team, shown, total, onChange }) {
         </FilterGroup>
       )}
 
+      {/* The due-date key, with each chip as a filter option. */}
+      {open === 'due' && (
+        <FilterGroup id="filter-due" label="Due dates">
+          <DueKeyChips
+            selected={filters.due}
+            onToggle={(state) => onChange({ ...filters, due: toggle(filters.due, state) })}
+          />
+        </FilterGroup>
+      )}
+
       {open === 'tool' && (
         <FilterGroup id="filter-tool" label="AI tool">
           {CONTEXT_TOOLS.map((tool) => (
@@ -1421,12 +1424,6 @@ function FilterBar({ filters, team, shown, total, onChange }) {
         </FilterGroup>
       )}
 
-      {/* The due-date key, always showing at the bottom of the pane so it can be
-          read alongside the cards. Its chips are the due-date filter. */}
-      <DueKeyFilter
-        selected={filters.due}
-        onToggle={(state) => onChange({ ...filters, due: toggle(filters.due, state) })}
-      />
     </section>
   );
 }
