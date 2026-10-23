@@ -110,7 +110,7 @@ One short sentence per element. These set the tone for the build phase — Perso
 
 - **Cards:** White `surface-card` on the warm `surface-page` with a 1px border so the edge is visible without relying on shadow, and the due-date tint always comes with a text label ("Overdue", "Due today") so state is never shown by colour alone.
 - **Buttons:** Solid `brand-primary` with white text (4.51:1, passes WCAG AA), rounded-md, at least 44 px tall for an easy target, with a visible focus ring for keyboard users.
-- **Modal:** Centred, max-w-md, `text-primary` backdrop at 50% opacity, focus moves into the modal when it opens and Escape closes it, so keyboard and screen reader users are never trapped.
+- **Modal:** Centred, max-w-md (the task modal widens to max-w-4xl with two columns from the md breakpoint: task details left, AI tool and Context right), `text-primary` backdrop at 50% opacity, focus moves into the modal when it opens and Escape closes it, so keyboard and screen reader users are never trapped.
 - **Empty states:** Dashed border with one short plain sentence, so an empty column is explained in words rather than just looking blank.
 - **Drag affordance (if used):** Added in M12. Cards can be dragged to another column with the mouse (browser drag and drop, no library); the card fades while dragged and the column under it gets a `brand-primary` outline. The status dropdown stays as the way to move a task by keyboard or screen reader, where drag and drop often does not work.
 

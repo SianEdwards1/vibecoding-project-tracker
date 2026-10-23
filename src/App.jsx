@@ -162,31 +162,36 @@ export function buildContextMarkdown(task) {
 // when a task is opened, so old tasks still work.
 const CONTEXT_DEFAULTS = { context: '', contextTool: null, contextUpdatedAt: null };
 
-// The due-date filter options (M12), in display order. Each one matches the dueGroup()
-// groups listed. "This week" includes today, so it is the next 7 days counting today.
-// Done tasks are in their own group, so they never match a due-date filter.
-const DUE_FILTERS = [
-  { id: 'overdue', label: 'Overdue', groups: ['overdue'] },
-  { id: 'today', label: 'Due today', groups: ['today'] },
-  { id: 'week', label: 'This week', groups: ['today', 'week'] },
-  { id: 'none', label: 'No date', groups: ['none'] },
-];
-
-const NO_FILTERS = { people: [], due: null, tools: [] };
+// types holds TASK_TYPES ids ('feature', 'bug').
+// due holds DUE_STATES ids ('alarm', 'warning', 'calm', 'neutral'), the same states as the
+// chips on the cards, picked from the clickable due-date key.
+const NO_FILTERS = { people: [], types: [], due: [], tools: [] };
 
 function isFiltering(filters) {
-  return filters.people.length > 0 || filters.due !== null || filters.tools.length > 0;
+  return (
+    filters.people.length > 0 ||
+    filters.types.length > 0 ||
+    filters.due.length > 0 ||
+    filters.tools.length > 0
+  );
+}
+
+// The chip a task shows on its card, as a DUE_STATES id, or null for no chip.
+// getDueState() also says 'neutral' for an open task with no date, but those have no
+// chip, so they only count as 'neutral' (Done) when they really are done.
+function chipState(task, now) {
+  if (task.status === 'done') return 'neutral';
+  if (!task.dueDate) return null;
+  return getDueState(task, now);
 }
 
 // True if the task passes every filter that is switched on (they combine with AND).
 // Inside one filter, any of the picked options will do, e.g. "Sian or Ela".
 function matchesFilters(task, filters, now) {
   if (filters.people.length > 0 && !filters.people.includes(task.assignee)) return false;
+  if (filters.types.length > 0 && !filters.types.includes(task.type)) return false;
   if (filters.tools.length > 0 && !filters.tools.includes(task.contextTool)) return false;
-  if (filters.due) {
-    const option = DUE_FILTERS.find((due) => due.id === filters.due);
-    if (!option.groups.includes(dueGroup(task, now))) return false;
-  }
+  if (filters.due.length > 0 && !filters.due.includes(chipState(task, now))) return false;
   return true;
 }
 
@@ -726,8 +731,6 @@ export default function App() {
 
       <AnchorBoard anchors={anchors} onSave={saveAnchorUrl} />
 
-      <DueLegend />
-
       <FilterBar
         filters={filters}
         team={team}
@@ -1187,7 +1190,13 @@ function TaskCard({ task, team, now, onOpen, onCopy }) {
             </span>
           )}
         </span>
-        <TypeIcon type={task.type} />
+        {/* The type's icon and name together, in the type's colour. */}
+        <span
+          className={`inline-flex shrink-0 items-center gap-1 font-mono text-xs ${style.textClass}`}
+        >
+          <TypeIcon type={task.type} decorative />
+          {style.label}
+        </span>
       </button>
       <div className="flex justify-end gap-1 px-2">
         <button type="button" onClick={onCopy} className={cardActionClass}>
@@ -1245,30 +1254,58 @@ function DueChip({ state, children }) {
   );
 }
 
-// The key above the board: one chip per due state and what it means.
-function DueLegend() {
+// The due-date key along the bottom of the filter pane. It explains the chips on the cards,
+// and each chip is also a filter button: press one to show only tasks with that chip.
+// More than one can be on. A switched-on chip gets a solid outline in its own ink colour
+// and bold text, so it doesn't rely on colour alone.
+function DueKeyFilter({ selected, onToggle }) {
   return (
-    <section
-      aria-label="Due date key"
-      className="mb-4 flex flex-wrap items-center gap-2 text-xs text-text-muted dark:text-text-muted-dark"
+    <div
+      role="group"
+      aria-labelledby="due-key-label"
+      className="mt-1 flex flex-wrap items-center gap-x-1 border-t border-border-subtle pt-1 text-xs text-text-muted dark:border-border-subtle-dark dark:text-text-muted-dark"
     >
-      <span className="font-medium">Due dates:</span>
-      {Object.entries(DUE_STATES).map(([state, { meaning }]) => (
-        <DueChip key={state} state={state}>
-          {meaning}
-        </DueChip>
-      ))}
-      <span>No chip means no due date. Dates with no time are due at the end of the day.</span>
-    </section>
+      <span id="due-key-label" className="mr-1 font-medium">
+        Due dates:
+      </span>
+      {Object.entries(DUE_STATES).map(([state, style]) => {
+        const pressed = selected.includes(state);
+        return (
+          <button
+            key={state}
+            type="button"
+            aria-pressed={pressed}
+            onClick={() => onToggle(state)}
+            title={pressed ? `Stop filtering by ${style.meaning}` : `Show only ${style.meaning}`}
+            className={cardActionClass}
+          >
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-xs group-focus-visible:ring-2 group-focus-visible:ring-brand-primary group-focus-visible:ring-offset-2 dark:group-focus-visible:ring-brand-primary-dark dark:group-focus-visible:ring-offset-surface-card-dark ${style.chipClass} ${
+                pressed
+                  ? 'font-semibold outline outline-2 outline-current'
+                  : 'group-hover:outline group-hover:outline-1 group-hover:outline-current'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5">{style.icon}</Icon>
+              {style.meaning}
+            </span>
+          </button>
+        );
+      })}
+      <span className="ml-1">
+        No chip means no due date. Dates with no time are due at the end of the day.
+      </span>
+    </div>
   );
 }
 
-// The filter bar above the board (M12): person, due date and AI tool, plus how many
-// tasks are showing. Each filter is a button that opens its options underneath, one at a time.
+// The filter bar above the board (M12): person, type and AI tool, how many tasks are
+// showing, and the clickable due-date key along the bottom.
+// Each filter is a button that opens its options underneath, one at a time.
 // Each option is a toggle button, and a switched-on one gets a tick and a stronger
 // border as well as a tint, so it doesn't rely on colour alone.
 function FilterBar({ filters, team, shown, total, onChange }) {
-  // Which filter's options are open: 'person', 'due', 'tool', or null for none.
+  // Which filter's options are open: 'person', 'type', 'tool', or null for none.
   const [open, setOpen] = useState(null);
 
   // Clearing removes the "Clear filters" button, so focus moves to the first filter
@@ -1288,7 +1325,7 @@ function FilterBar({ filters, team, shown, total, onChange }) {
   // How many options are on in each filter, shown on its button while it is closed.
   const groups = [
     { id: 'person', label: 'Person', active: filters.people.length },
-    { id: 'due', label: 'Due date', active: filters.due ? 1 : 0 },
+    { id: 'type', label: 'Type', active: filters.types.length },
     { id: 'tool', label: 'AI tool', active: filters.tools.length },
   ];
 
@@ -1352,19 +1389,19 @@ function FilterBar({ filters, team, shown, total, onChange }) {
         </FilterGroup>
       )}
 
-      {/* Only one due-date option at a time, since "This week" already includes today.
-          Pressing the one that is on turns it off. */}
-      {open === 'due' && (
-        <FilterGroup id="filter-due" label="Due date">
-          {DUE_FILTERS.map((option) => (
+      {/* Each type keeps its own icon and colour from TASK_TYPES, as on the cards.
+          Switched on, it also gets the type's tint and a tick. */}
+      {open === 'type' && (
+        <FilterGroup id="filter-type" label="Type">
+          {Object.entries(TASK_TYPES).map(([value, style]) => (
             <FilterChip
-              key={option.id}
-              pressed={filters.due === option.id}
-              onClick={() =>
-                onChange({ ...filters, due: filters.due === option.id ? null : option.id })
-              }
+              key={value}
+              pressed={filters.types.includes(value)}
+              pressedClass={`font-semibold ${style.selectedClass}`}
+              onClick={() => onChange({ ...filters, types: toggle(filters.types, value) })}
             >
-              {option.label}
+              <TypeIcon type={value} className="h-3.5 w-3.5" decorative />
+              <span className={`font-mono ${style.textClass}`}>{style.label}</span>
             </FilterChip>
           ))}
         </FilterGroup>
@@ -1383,6 +1420,13 @@ function FilterBar({ filters, team, shown, total, onChange }) {
           ))}
         </FilterGroup>
       )}
+
+      {/* The due-date key, always showing at the bottom of the pane so it can be
+          read alongside the cards. Its chips are the due-date filter. */}
+      <DueKeyFilter
+        selected={filters.due}
+        onToggle={(state) => onChange({ ...filters, due: toggle(filters.due, state) })}
+      />
     </section>
   );
 }
@@ -1444,8 +1488,17 @@ function FilterGroup({ id, label, children }) {
 }
 
 // One filter option. Like the card actions, the outer button is the 44 px press area
-// and the pill inside is the part you see.
-function FilterChip({ pressed, onClick, title, withAvatar = false, buttonRef, children }) {
+// and the pill inside is the part you see. `pressedClass` swaps the blue switched-on
+// look for another one, e.g. a task type's own colour.
+function FilterChip({
+  pressed,
+  onClick,
+  title,
+  withAvatar = false,
+  pressedClass = 'border-brand-primary bg-brand-primary/10 font-semibold dark:border-brand-primary-dark dark:bg-brand-primary-dark/10',
+  buttonRef,
+  children,
+}) {
   return (
     <button
       ref={buttonRef}
@@ -1460,7 +1513,7 @@ function FilterChip({ pressed, onClick, title, withAvatar = false, buttonRef, ch
           withAvatar ? 'pl-0.5 pr-2' : 'px-2'
         } ${
           pressed
-            ? 'border-brand-primary bg-brand-primary/10 font-semibold dark:border-brand-primary-dark dark:bg-brand-primary-dark/10'
+            ? pressedClass
             : 'border-border-subtle bg-surface-card group-hover:border-text-muted dark:border-border-subtle-dark dark:bg-surface-card-dark dark:group-hover:border-text-muted-dark'
         }`}
       >
@@ -1740,7 +1793,7 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
         aria-modal="true"
         aria-labelledby="task-modal-heading"
         onSubmit={handleSubmit}
-        className={`flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg border-t-8 bg-surface-card dark:bg-surface-card-dark p-6 ${taskTypeStyle(draft.type).topStripeClass}`}
+        className={`flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg border-t-8 bg-surface-card dark:bg-surface-card-dark p-6 md:max-w-4xl ${taskTypeStyle(draft.type).topStripeClass}`}
       >
         <div className="flex items-center justify-between gap-2">
           <h2 id="task-modal-heading" className="text-lg font-semibold">
@@ -1749,271 +1802,282 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
           <TypeBadge type={draft.type} />
         </div>
 
-        <label className="block text-sm font-medium">
-          Title
-          <input
-            type="text"
-            autoFocus
-            value={draft.title}
-            onChange={(event) => {
-              update('title', event.target.value);
-              setError('');
-            }}
-            aria-invalid={error ? 'true' : 'false'}
-            aria-describedby={error ? 'task-title-error' : undefined}
-            className={fieldClass}
-          />
-          {error && (
-            <span id="task-title-error" className="mt-1 block text-xs text-type-bug dark:text-type-bug-dark">
-              {error}
-            </span>
-          )}
-        </label>
+        {/* Two columns on wider screens: the task itself on the left,
+            the AI tool and Context on the right. */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-4">
+            <label className="block text-sm font-medium">
+              Title
+              <input
+                type="text"
+                autoFocus
+                value={draft.title}
+                onChange={(event) => {
+                  update('title', event.target.value);
+                  setError('');
+                }}
+                aria-invalid={error ? 'true' : 'false'}
+                aria-describedby={error ? 'task-title-error' : undefined}
+                className={fieldClass}
+              />
+              {error && (
+                <span id="task-title-error" className="mt-1 block text-xs text-type-bug dark:text-type-bug-dark">
+                  {error}
+                </span>
+              )}
+            </label>
 
-        <label className="block text-sm font-medium">
-          Description
-          <textarea
-            rows={3}
-            value={draft.description}
-            onChange={(event) => update('description', event.target.value)}
-            className={fieldClass}
-          />
-        </label>
+            <label className="block text-sm font-medium">
+              Description
+              <textarea
+                rows={3}
+                value={draft.description}
+                onChange={(event) => update('description', event.target.value)}
+                className={fieldClass}
+              />
+            </label>
 
-        <div className="grid grid-cols-2 gap-4">
-          {/* One button per type. They are radio buttons underneath (hidden with sr-only),
-              so arrow keys and screen readers work. The selected one is highlighted
-              in its type colour from TASK_TYPES. */}
-          <fieldset className="text-sm font-medium">
-            <legend>Type</legend>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              {Object.entries(TASK_TYPES).map(([value, style]) => {
-                const selected = draft.type === value;
-                return (
-                  <label key={value} className="cursor-pointer">
-                    <input
-                      type="radio"
-                      name="task-type"
-                      value={value}
-                      checked={selected}
-                      onChange={() => update('type', value)}
-                      className="peer sr-only"
-                    />
-                    <span
-                      className={`flex items-center justify-center gap-1.5 rounded-md border px-2 py-2 font-mono text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-brand-primary dark:peer-focus-visible:ring-brand-primary-dark ${
-                        selected
-                          ? `font-semibold ${style.selectedClass}`
-                          : 'border-border-subtle dark:border-border-subtle-dark bg-surface-card dark:bg-surface-card-dark text-text-muted dark:text-text-muted-dark hover:border-text-muted dark:hover:border-text-muted-dark'
-                      }`}
-                    >
-                      <TypeIcon type={value} decorative />
-                      {style.label}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
+            <div className="grid grid-cols-2 gap-4">
+              {/* One button per type. They are radio buttons underneath (hidden with sr-only),
+                  so arrow keys and screen readers work. The selected one is highlighted
+                  in its type colour from TASK_TYPES. */}
+              <fieldset className="text-sm font-medium">
+                <legend>Type</legend>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  {Object.entries(TASK_TYPES).map(([value, style]) => {
+                    const selected = draft.type === value;
+                    return (
+                      <label key={value} className="cursor-pointer">
+                        <input
+                          type="radio"
+                          name="task-type"
+                          value={value}
+                          checked={selected}
+                          onChange={() => update('type', value)}
+                          className="peer sr-only"
+                        />
+                        <span
+                          className={`flex items-center justify-center gap-1.5 rounded-md border px-2 py-2 font-mono text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-brand-primary dark:peer-focus-visible:ring-brand-primary-dark ${
+                            selected
+                              ? `font-semibold ${style.selectedClass}`
+                              : 'border-border-subtle dark:border-border-subtle-dark bg-surface-card dark:bg-surface-card-dark text-text-muted dark:text-text-muted-dark hover:border-text-muted dark:hover:border-text-muted-dark'
+                          }`}
+                        >
+                          <TypeIcon type={value} decorative />
+                          {style.label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
 
-          <label className="block text-sm font-medium">
-            Status
-            <select
-              value={draft.status}
-              onChange={(event) => update('status', event.target.value)}
-              className={fieldClass}
-            >
-              {STAGES.map((stage) => (
-                <option key={stage.id} value={stage.id}>
-                  {stage.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {/* A new task picks its first owner here. An existing task changes owner
-            through the Owner box instead. */}
-        {isNew && (
-          <label className="block text-sm font-medium">
-            Assignee
-            <select
-              value={draft.assignee}
-              onChange={(event) => update('assignee', event.target.value)}
-              className={fieldClass}
-            >
-              {team.map((member) => (
-                <option key={member.name} value={member.name}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {/* Owner box: who has the task now, a swap icon, then who to hand it to. */}
-        {!isNew && (
-          <fieldset className="rounded-md border border-border-subtle dark:border-border-subtle-dark p-3">
-            <legend className="px-1 text-sm font-medium">Owner</legend>
-            <div className="flex items-center gap-3">
-              <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-                <Avatar name={draft.assignee} team={team} />
-                <span className="truncate">{draft.assignee}</span>
-              </span>
-              <SwapIcon />
-              <label className="min-w-0 flex-1">
-                <span className="sr-only">Hand off to</span>
-                {/* Always shows the placeholder: picking a name hands off at once. */}
+              <label className="block text-sm font-medium">
+                Status
                 <select
-                  value=""
-                  onChange={(event) => handOff(event.target.value)}
-                  disabled={team.length < 2}
-                  className={`${fieldClass.replace('mt-1 ', '')} disabled:cursor-not-allowed disabled:text-text-muted dark:disabled:text-text-muted-dark`}
+                  value={draft.status}
+                  onChange={(event) => update('status', event.target.value)}
+                  className={fieldClass}
                 >
-                  <option value="" disabled>
-                    {team.length > 1 ? 'Hand off to…' : 'No one else on the team'}
-                  </option>
-                  {team
-                    .filter((member) => member.name !== draft.assignee)
-                    .map((member) => (
-                      <option key={member.name} value={member.name}>
-                        {member.name}
-                      </option>
-                    ))}
+                  {STAGES.map((stage) => (
+                    <option key={stage.id} value={stage.id}>
+                      {stage.label}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
-          </fieldset>
-        )}
 
-        {/* The briefing to paste into an AI tool or pass to a teammate. */}
-        <div>
-          <div className="flex items-end justify-between gap-2">
-            <label htmlFor="task-context" className="text-sm font-medium">
-              Context
-              <span className="ml-2 text-xs font-normal text-text-muted dark:text-text-muted-dark">Markdown supported</span>
-            </label>
-            <div className="flex gap-1">
-              <button type="button" onClick={applyTemplate} className={smallButtonClass}>
-                <Icon>{TEMPLATE_ICON}</Icon>
-                Use template
-              </button>
-              <button type="button" onClick={() => onCopy(draft)} className={smallButtonClass}>
-                <Icon>{COPY_ICON}</Icon>
-                Copy Context
-              </button>
-            </div>
+            {/* A new task picks its first owner here. An existing task changes owner
+                through the Owner box instead. */}
+            {isNew && (
+              <label className="block text-sm font-medium">
+                Assignee
+                <select
+                  value={draft.assignee}
+                  onChange={(event) => update('assignee', event.target.value)}
+                  className={fieldClass}
+                >
+                  {team.map((member) => (
+                    <option key={member.name} value={member.name}>
+                      {member.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {/* Owner box: who has the task now, a swap icon, then who to hand it to. */}
+            {!isNew && (
+              <fieldset className="rounded-md border border-border-subtle dark:border-border-subtle-dark p-3">
+                <legend className="px-1 text-sm font-medium">Owner</legend>
+                <div className="flex items-center gap-3">
+                  <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                    <Avatar name={draft.assignee} team={team} />
+                    <span className="truncate">{draft.assignee}</span>
+                  </span>
+                  <SwapIcon />
+                  <label className="min-w-0 flex-1">
+                    <span className="sr-only">Hand off to</span>
+                    {/* Always shows the placeholder: picking a name hands off at once. */}
+                    <select
+                      value=""
+                      onChange={(event) => handOff(event.target.value)}
+                      disabled={team.length < 2}
+                      className={`${fieldClass.replace('mt-1 ', '')} disabled:cursor-not-allowed disabled:text-text-muted dark:disabled:text-text-muted-dark`}
+                    >
+                      <option value="" disabled>
+                        {team.length > 1 ? 'Hand off to…' : 'No one else on the team'}
+                      </option>
+                      {team
+                        .filter((member) => member.name !== draft.assignee)
+                        .map((member) => (
+                          <option key={member.name} value={member.name}>
+                            {member.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                </div>
+              </fieldset>
+            )}
+
+            {/* Date and an optional time. With no time, the task is due at the end of the day. */}
+            <fieldset className="text-sm font-medium">
+              <legend>Due</legend>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block text-xs font-normal text-text-muted dark:text-text-muted-dark">
+                  Date
+                  <input
+                    type="date"
+                    value={dueDay}
+                    onChange={(event) => updateDue(event.target.value, dueTime)}
+                    className={`${fieldClass} text-text-primary dark:text-text-primary-dark`}
+                  />
+                </label>
+                <label className="block text-xs font-normal text-text-muted dark:text-text-muted-dark">
+                  Time (optional)
+                  <input
+                    type="time"
+                    value={dueTime}
+                    onChange={(event) => updateDue(dueDay, event.target.value)}
+                    disabled={!dueDay}
+                    className={`${fieldClass} text-text-primary dark:text-text-primary-dark disabled:cursor-not-allowed disabled:text-text-muted dark:disabled:text-text-muted-dark`}
+                  />
+                </label>
+              </div>
+            </fieldset>
+
+            <p className="text-sm text-text-muted dark:text-text-muted-dark">Created {formatDate(draft.createdDate)}</p>
           </div>
-          {confirmingTemplate && (
-            <div
-              role="alertdialog"
-              aria-labelledby="template-confirm-text"
-              className="mt-1 flex flex-wrap items-center gap-2 rounded-md border border-border-subtle dark:border-border-subtle-dark bg-surface-page dark:bg-surface-page-dark p-2"
-            >
-              <p id="template-confirm-text" className="flex-1 text-xs">
-                Replace your context with the template?
+
+          {/* Right column: the AI tool and the Context briefing that goes to it.
+              Below the md breakpoint the two columns stack, left one first. */}
+          <div className="flex min-w-0 flex-col gap-4 border-border-subtle dark:border-border-subtle-dark md:border-l md:pl-6">
+            {/* The AI tool, plus a link to open it when the tool has one in AI_TOOL_LINKS. */}
+            <div>
+              <div className="flex items-end gap-2">
+                <label className="block flex-1 text-sm font-medium">
+                  AI tool (optional)
+                  <select
+                    value={draft.contextTool ?? ''}
+                    onChange={(event) => update('contextTool', event.target.value || null)}
+                    className={fieldClass}
+                  >
+                    <option value="">None</option>
+                    {CONTEXT_TOOLS.map((tool) => (
+                      <option key={tool} value={tool}>
+                        {tool}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {toolLink && (
+                  <a
+                    href={toolLink.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
+                  >
+                    <Icon>{EXTERNAL_LINK_ICON}</Icon>
+                    Open in {draft.contextTool}
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                )}
+              </div>
+              {toolLink?.tooLong && (
+                <p className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
+                  Too long for a link, so {draft.contextTool} opens without your text. Use Copy Context
+                  and paste it in.
+                </p>
+              )}
+            </div>
+
+            {/* The briefing to paste into an AI tool or pass to a teammate.
+                It grows to fill the rest of the column. */}
+            <div className="flex flex-1 flex-col">
+              <div className="flex items-end justify-between gap-2">
+                <label htmlFor="task-context" className="text-sm font-medium">
+                  Context
+                  <span className="ml-2 text-xs font-normal text-text-muted dark:text-text-muted-dark">Markdown supported</span>
+                </label>
+                <div className="flex gap-1">
+                  <button type="button" onClick={applyTemplate} className={smallButtonClass}>
+                    <Icon>{TEMPLATE_ICON}</Icon>
+                    Use template
+                  </button>
+                  <button type="button" onClick={() => onCopy(draft)} className={smallButtonClass}>
+                    <Icon>{COPY_ICON}</Icon>
+                    Copy Context
+                  </button>
+                </div>
+              </div>
+              {confirmingTemplate && (
+                <div
+                  role="alertdialog"
+                  aria-labelledby="template-confirm-text"
+                  className="mt-1 flex flex-wrap items-center gap-2 rounded-md border border-border-subtle dark:border-border-subtle-dark bg-surface-page dark:bg-surface-page-dark p-2"
+                >
+                  <p id="template-confirm-text" className="flex-1 text-xs">
+                    Replace your context with the template?
+                  </p>
+                  <button
+                    type="button"
+                    autoFocus
+                    onClick={() => setConfirmingTemplate(false)}
+                    className={smallButtonClass}
+                  >
+                    Keep my text
+                  </button>
+                  <button type="button" onClick={replaceWithTemplate} className={smallButtonClass}>
+                    Replace
+                  </button>
+                </div>
+              )}
+              <textarea
+                id="task-context"
+                rows={14}
+                value={draft.context}
+                onChange={(event) => update('context', event.target.value)}
+                aria-describedby="task-context-updated"
+                className={`${fieldClass} flex-1 font-mono`}
+              />
+              <p id="task-context-updated" className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
+                {draft.contextUpdatedAt ? (
+                  <time
+                    dateTime={draft.contextUpdatedAt}
+                    title={new Date(draft.contextUpdatedAt).toLocaleString('en-GB')}
+                  >
+                    Last updated {timeAgo(draft.contextUpdatedAt, now)}
+                  </time>
+                ) : (
+                  'Not updated yet'
+                )}
+                {contextChanged && ' (unsaved changes)'}
               </p>
-              <button
-                type="button"
-                autoFocus
-                onClick={() => setConfirmingTemplate(false)}
-                className={smallButtonClass}
-              >
-                Keep my text
-              </button>
-              <button type="button" onClick={replaceWithTemplate} className={smallButtonClass}>
-                Replace
-              </button>
             </div>
-          )}
-          <textarea
-            id="task-context"
-            rows={8}
-            value={draft.context}
-            onChange={(event) => update('context', event.target.value)}
-            aria-describedby="task-context-updated"
-            className={`${fieldClass} font-mono`}
-          />
-          <p id="task-context-updated" className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
-            {draft.contextUpdatedAt ? (
-              <time
-                dateTime={draft.contextUpdatedAt}
-                title={new Date(draft.contextUpdatedAt).toLocaleString('en-GB')}
-              >
-                Last updated {timeAgo(draft.contextUpdatedAt, now)}
-              </time>
-            ) : (
-              'Not updated yet'
-            )}
-            {contextChanged && ' (unsaved changes)'}
-          </p>
-        </div>
-
-        {/* The AI tool, plus a link to open it when the tool has one in AI_TOOL_LINKS. */}
-        <div>
-          <div className="flex items-end gap-2">
-            <label className="block flex-1 text-sm font-medium">
-              AI tool (optional)
-              <select
-                value={draft.contextTool ?? ''}
-                onChange={(event) => update('contextTool', event.target.value || null)}
-                className={fieldClass}
-              >
-                <option value="">None</option>
-                {CONTEXT_TOOLS.map((tool) => (
-                  <option key={tool} value={tool}>
-                    {tool}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {toolLink && (
-              <a
-                href={toolLink.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
-              >
-                <Icon>{EXTERNAL_LINK_ICON}</Icon>
-                Open in {draft.contextTool}
-                <span className="sr-only"> (opens in a new tab)</span>
-              </a>
-            )}
           </div>
-          {toolLink?.tooLong && (
-            <p className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
-              Too long for a link, so {draft.contextTool} opens without your text. Use Copy Context
-              and paste it in.
-            </p>
-          )}
         </div>
-
-        {/* Date and an optional time. With no time, the task is due at the end of the day. */}
-        <fieldset className="text-sm font-medium">
-          <legend>Due</legend>
-          <div className="grid grid-cols-2 gap-4">
-            <label className="block text-xs font-normal text-text-muted dark:text-text-muted-dark">
-              Date
-              <input
-                type="date"
-                value={dueDay}
-                onChange={(event) => updateDue(event.target.value, dueTime)}
-                className={`${fieldClass} text-text-primary dark:text-text-primary-dark`}
-              />
-            </label>
-            <label className="block text-xs font-normal text-text-muted dark:text-text-muted-dark">
-              Time (optional)
-              <input
-                type="time"
-                value={dueTime}
-                onChange={(event) => updateDue(dueDay, event.target.value)}
-                disabled={!dueDay}
-                className={`${fieldClass} text-text-primary dark:text-text-primary-dark disabled:cursor-not-allowed disabled:text-text-muted dark:disabled:text-text-muted-dark`}
-              />
-            </label>
-          </div>
-        </fieldset>
-
-        <p className="text-sm text-text-muted dark:text-text-muted-dark">Created {formatDate(draft.createdDate)}</p>
 
         {confirmingDelete ? (
           // Shown in place of the normal buttons after Delete is pressed.
