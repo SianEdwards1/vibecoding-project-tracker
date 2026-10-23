@@ -2174,13 +2174,16 @@ function TeamModal({ team, tasks, onAdd, onRemove, onClose }) {
     setError('');
   }
 
-  // Someone who still owns tasks can't be removed, so no task is ever left without an owner.
+  // Someone who still owns open tasks can't be removed, so no open task is left without an owner.
+  // Done tasks don't count: they keep the old owner's name as a record of who did them.
   // That is checked first, so the confirm message only shows when removing is allowed.
   function handleRemove(name) {
-    const owned = tasks.filter((task) => task.assignee === name).length;
+    const owned = tasks.filter(
+      (task) => task.assignee === name && task.status !== 'done'
+    ).length;
     if (owned > 0) {
       setError(
-        `${name} still owns ${owned} ${owned === 1 ? 'task' : 'tasks'}. Hand ${owned === 1 ? 'it' : 'them'} off first.`
+        `${name} still owns ${owned} open ${owned === 1 ? 'task' : 'tasks'}. Hand ${owned === 1 ? 'it' : 'them'} off first.`
       );
       return;
     }
