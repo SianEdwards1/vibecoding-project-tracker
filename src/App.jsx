@@ -94,12 +94,12 @@ export const ANCHORS = [
   { id: 'documentation', label: 'Documentation', url: null },
 ];
 
-// True if the text is a full web link starting with http:// or https://.
-// Anything else (e.g. 'hello' or 'javascript:...') is refused, so every saved link is safe to click.
+// True if the text is a full web link starting with https://.
+// Anything else (e.g. 'hello', 'http://...' or 'javascript:...') is refused, so every saved link is safe to click.
 function isValidUrl(text) {
   try {
     const url = new URL(text);
-    return url.protocol === 'http:' || url.protocol === 'https:';
+    return url.protocol === 'https:';
   } catch {
     return false; // new URL() throws if the text is not a link at all
   }
@@ -144,7 +144,7 @@ export function buildContextMarkdown(task) {
     `Type: ${TASK_TYPES[task.type]?.label ?? task.type}`,
     `Status: ${STAGES.find((stage) => stage.id === task.status)?.label ?? task.status}`,
   ];
-  if (task.assignee) details.push(`Owner: ${task.assignee}`);
+  if (task.assignee) details.push(`Assignee: ${task.assignee}`);
   if (task.dueDate) {
     const [day, time] = task.dueDate.split('T');
     details.push(`Due: ${formatDate(day)}${time ? ` at ${time}` : ''}`);
@@ -761,6 +761,9 @@ export default function App() {
   // True while the Create board panel is open.
   const [creatingBoard, setCreatingBoard] = useState(false);
 
+  // The "Add task" button, for focus after the first board is made.
+  const addTaskRef = useRef(null);
+
   // The current time, refreshed every minute so the due chips update on their own.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -788,6 +791,9 @@ export default function App() {
     ]);
     openBoard(id);
     setCreatingBoard(false);
+    // From the "no boards" screen, the button that opened the panel has gone, so focus
+    // goes to "Add task" on the new board instead of being lost.
+    if (!board) setTimeout(() => addTaskRef.current?.focus());
   }
 
   // Only the Owner can add or remove people, and no one can remove themselves.
@@ -941,10 +947,6 @@ export default function App() {
           <h1 className="text-2xl font-semibold text-brand-primary dark:text-brand-primary-dark">
             Vibecoding Project Tracker
           </h1>
-          <p className="text-sm text-text-muted dark:text-text-muted-dark">
-            {/* Replace this line with your team name from PRD §11. */}
-            Team starter
-          </p>
           {board && (
             <BoardSwitcher
               boards={myBoards}
@@ -999,6 +1001,7 @@ export default function App() {
               </button>
               {/* The plus icon takes the place of the "+" in DESIGN.md's "+ Add task". */}
               <button
+                ref={addTaskRef}
                 type="button"
                 onClick={openNewTask}
                 className={`${primaryButtonClass} inline-flex items-center gap-1.5`}
@@ -1041,6 +1044,7 @@ export default function App() {
             {STAGES.map((stage) => (
               <Column
                 key={stage.id}
+                id={stage.id}
                 label={stage.label}
                 tasks={visibleTasks.filter((task) => task.status === stage.id)}
                 collapsed={collapsedColumns.includes(stage.id)}
@@ -1123,7 +1127,7 @@ export default function App() {
 const buttonBaseClass =
   'min-h-11 rounded-md px-4 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary dark:focus-visible:ring-brand-primary-dark focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-page-dark';
 const primaryButtonClass = `${buttonBaseClass} bg-brand-primary text-white hover:bg-brand-accent`;
-const secondaryButtonClass = `${buttonBaseClass} border border-border-subtle dark:border-border-subtle-dark bg-surface-card dark:bg-surface-card-dark hover:border-text-muted dark:hover:border-text-muted-dark`;
+const secondaryButtonClass = `${buttonBaseClass} border border-text-muted/70 dark:border-text-muted-dark/70 bg-surface-card dark:bg-surface-card-dark hover:border-text-muted dark:hover:border-text-muted-dark`;
 const dangerButtonClass = `${buttonBaseClass} border border-type-bug dark:border-type-bug-dark bg-surface-card dark:bg-surface-card-dark text-type-bug dark:text-type-bug-dark hover:bg-due-overdue dark:hover:bg-due-overdue-dark`;
 const confirmDeleteButtonClass = `${buttonBaseClass} bg-type-bug text-white hover:opacity-90`;
 // A lighter button for small actions next to a field: small text and no border, but still 44 px tall.
@@ -1135,7 +1139,7 @@ const cardActionClass = 'group inline-flex min-h-11 items-center focus:outline-n
 const cardPillClass =
   'inline-flex items-center gap-1 rounded-full border border-border-subtle dark:border-border-subtle-dark px-2 py-0.5 text-xs font-medium text-brand-primary dark:text-brand-primary-dark group-hover:bg-brand-primary/10 group-hover:text-brand-accent dark:group-hover:bg-brand-primary-dark/10 dark:group-hover:text-brand-primary-dark group-focus-visible:ring-2 group-focus-visible:ring-brand-primary dark:group-focus-visible:ring-brand-primary-dark';
 const fieldClass =
-  'mt-1 w-full rounded-md border border-border-subtle dark:border-border-subtle-dark bg-surface-card dark:bg-surface-card-dark px-3 py-2 text-sm placeholder:text-text-muted dark:placeholder:text-text-muted-dark focus:outline-none focus:ring-2 focus:ring-brand-primary dark:focus:ring-brand-primary-dark';
+  'mt-1 w-full rounded-md border border-text-muted/70 dark:border-text-muted-dark/70 bg-surface-card dark:bg-surface-card-dark px-3 py-2 text-sm placeholder:text-text-muted dark:placeholder:text-text-muted-dark focus:outline-none focus:ring-2 focus:ring-brand-primary dark:focus:ring-brand-primary-dark';
 
 // The row of four deliverable cards above the board (M11).
 // It always shows the four ANCHORS in order, filling in any saved link by id.
@@ -1303,6 +1307,7 @@ const TASK_DRAG_TYPE = 'application/x-vibetracker-task';
 // Collapsed, it is a thin strip with the name and count, and the whole strip is the
 // button that opens it again. The count follows the filters, like the cards do.
 function Column({
+  id,
   label,
   tasks,
   collapsed,
@@ -1371,6 +1376,7 @@ function Column({
         <h2 className="flex flex-1">
           <button
             ref={toggleRef}
+            id={`column-strip-${id}`}
             type="button"
             aria-expanded="false"
             onClick={handleToggle}
@@ -1579,8 +1585,11 @@ function MoveMenu({ task, onMove }) {
         onSelect() {
           onMove(stage.id);
           // The card is drawn again in its new column, so focus follows it to its Move to button there.
-          // If that column is collapsed or filtered out, there is no button to go to.
-          setTimeout(() => document.getElementById(buttonId)?.focus());
+          // If that column is collapsed, focus goes to its strip instead. If the card is
+          // filtered out, there is nothing to go to.
+          setTimeout(() =>
+            (document.getElementById(buttonId) ?? document.getElementById(`column-strip-${stage.id}`))?.focus()
+          );
         },
       }))}
     />
@@ -2337,21 +2346,41 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // True while the "Replace your context with the template?" message is showing.
   const [confirmingTemplate, setConfirmingTemplate] = useState(false);
+  // True while the "Discard unsaved changes?" message is showing.
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  // True if anything differs from when the modal opened, so closing would lose it.
+  const hasChanges = JSON.stringify(draft) !== JSON.stringify({ ...CONTEXT_DEFAULTS, ...task });
 
   const dialogRef = useRef(null);
   useFocusTrap(dialogRef);
 
-  // Escape backs out of an open message first, otherwise closes the modal without saving.
+  // Esc, the backdrop and Cancel all close through here. With unsaved changes they ask first.
+  function requestClose() {
+    if (hasChanges) setConfirmingDiscard(true);
+    else onClose();
+  }
+
+  // "Keep editing" puts the normal buttons back, so focus goes to Cancel instead of being lost.
+  const cancelRef = useRef(null);
+  function keepEditing() {
+    setConfirmingDiscard(false);
+    setTimeout(() => cancelRef.current?.focus());
+  }
+
+  // Escape backs out of an open message first, otherwise closes the modal (asking first
+  // if there are unsaved changes).
   useEffect(() => {
     function handleKeyDown(event) {
       if (event.key !== 'Escape') return;
       if (confirmingDelete) setConfirmingDelete(false);
       else if (confirmingTemplate) setConfirmingTemplate(false);
-      else onClose();
+      else if (confirmingDiscard) keepEditing();
+      else requestClose();
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [confirmingDelete, confirmingTemplate, onClose]);
+  }, [confirmingDelete, confirmingTemplate, confirmingDiscard, hasChanges, onClose]);
 
   function update(field, value) {
     setDraft({ ...draft, [field]: value });
@@ -2413,7 +2442,7 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
     <div
       className="fixed inset-0 flex items-center justify-center bg-text-primary/50 p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) requestClose();
       }}
     >
       <form
@@ -2517,8 +2546,8 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
               </label>
             </div>
 
-            {/* A new task picks its first owner here. An existing task changes owner
-                through the Owner box instead. */}
+            {/* A new task picks its first assignee here. An existing task changes assignee
+                through the Assignee box instead. */}
             {isNew && (
               <label className="block text-sm font-medium">
                 Assignee
@@ -2536,10 +2565,10 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
               </label>
             )}
 
-            {/* Owner box: who has the task now, a swap icon, then who to hand it to. */}
+            {/* Assignee box: who has the task now, a swap icon, then who to hand it to. */}
             {!isNew && (
               <fieldset className="rounded-md border border-border-subtle dark:border-border-subtle-dark p-3">
-                <legend className="px-1 text-sm font-medium">Owner</legend>
+                <legend className="px-1 text-sm font-medium">Assignee</legend>
                 <div className="flex items-center gap-3">
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
                     <Avatar name={draft.assignee} team={team} />
@@ -2737,6 +2766,25 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
               </button>
             </div>
           </div>
+        ) : confirmingDiscard ? (
+          // Shown in place of the normal buttons when closing with unsaved changes.
+          <div
+            role="alertdialog"
+            aria-labelledby="discard-confirm-text"
+            className="flex flex-col gap-3 rounded-md border border-type-bug dark:border-type-bug-dark bg-due-overdue dark:bg-due-overdue-dark p-3"
+          >
+            <p id="discard-confirm-text" className="text-sm font-medium text-due-overdue-ink dark:text-due-overdue-ink-dark">
+              Discard unsaved changes?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" autoFocus onClick={keepEditing} className={secondaryButtonClass}>
+                Keep editing
+              </button>
+              <button type="button" onClick={onClose} className={confirmDeleteButtonClass}>
+                Discard
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             {!isNew && (
@@ -2749,7 +2797,12 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
                 Delete
               </button>
             )}
-            <button type="button" onClick={onClose} className={`${secondaryButtonClass} ml-auto`}>
+            <button
+              ref={cancelRef}
+              type="button"
+              onClick={requestClose}
+              className={`${secondaryButtonClass} ml-auto`}
+            >
               Cancel
             </button>
             <button type="submit" className={primaryButtonClass}>
