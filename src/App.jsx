@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { getDueState, dueLabel, dueGroup } from './dueState';
 
 /**
@@ -46,8 +46,8 @@ export const STAGES = [
   { id: 'done',        label: 'Done' },
 ];
 
-// Example team names (PRD §8). This is only the starting team: the Team panel (M7)
-// can add and remove people, and the current team is saved in localStorage.
+// Example team names (PRD §8), used for the starting accounts. Each board has its own
+// members, which its Owner changes in the Team panel (M7). Everything is saved in localStorage.
 export const TEAM = ['Sian Edwards', 'Ela Morgan', 'Bingo Edwards', 'Bonnie Morgan'];
 
 // Most people the Team panel allows. Avatar colours repeat after the fourth.
@@ -239,38 +239,142 @@ const AVATAR_COLOURS = {
   orange: 'bg-avatar-orange',
 };
 
-// The starting team, each person with a colour in order.
-// Every member is saved as { name, colour, role, password }, so their colour stays the same
-// even when someone else is added or removed. The first person (Sian) is the Team Leader.
-function makeStartingTeam() {
+// Prototype login. Everyone has one account, saved as { name, email, password, colour },
+// and can be on several boards. This is not real security: the passwords sit in
+// localStorage as plain text. The avatar colour belongs to the account, so it is the
+// same on every board.
+// Roles are per board: someone can be the Owner of one board and a Member of another.
+const ROLES = { owner: 'Owner', member: 'Member' };
+const DEMO_PASSWORD = 'password';
+
+// The starting accounts, each with a colour in order.
+function makeStartingAccounts() {
   const colours = Object.keys(AVATAR_COLOURS);
   return TEAM.map((name, index) => ({
     name,
-    colour: colours[index % colours.length],
-    role: index === 0 ? 'leader' : 'member',
+    email: seedEmail(name),
     password: DEMO_PASSWORD,
+    colour: colours[index % colours.length],
   }));
 }
 
-// Prototype login. Every teammate is an account, and every password is "password".
-// This is not real security: the passwords sit in localStorage as plain text.
-const ROLES = { leader: 'Team Leader', member: 'Team Member' };
-const DEMO_PASSWORD = 'password';
-
-// A teammate's role. Teams saved before the login have no roles, so the first
-// person on the starting team is the leader and everyone else is a member.
-function roleOf(member) {
-  return member.role ?? (member.name === TEAM[0] ? 'leader' : 'member');
+// The demo email for a starting teammate: their first name, e.g. sian@email.com.
+function seedEmail(name) {
+  return `${name.split(' ')[0].toLowerCase()}@email.com`;
 }
 
-// The teammate a login matches, or null. The name can be the full name or just the
-// first name (e.g. "Sian"), in any case. A first name two people share only works in full.
-function findAccount(team, name, password) {
-  const typed = name.trim().toLowerCase();
-  const fullMatch = team.find((member) => member.name.toLowerCase() === typed);
-  const firstMatches = team.filter((member) => member.name.split(' ')[0].toLowerCase() === typed);
-  const member = fullMatch ?? (firstMatches.length === 1 ? firstMatches[0] : null);
-  return member && password === (member.password ?? DEMO_PASSWORD) ? member : null;
+// A teammate's email, in lower case so emails match in any case. Teams saved before
+// emails existed have none, so they get the same demo email as the starting team.
+function emailOf(member) {
+  return (member.email ?? seedEmail(member.name)).toLowerCase();
+}
+
+// Reads something saved by an older version of the app, or the fallback if there is nothing.
+function readSaved(key, fallback) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw != null ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// The accounts and boards on first load of the multi-board version.
+// The old single board (vibetracker.tasks, .team and .anchors) becomes "Group Project",
+// owned by Sian, with the old teammates as Members, so nothing is lost. The old keys are
+// left as they are. "Ela's Board" is added so switching boards and per-board roles can be shown.
+// With nothing saved at all, the starting team and seed tasks are used instead.
+function makeStartingData() {
+  const oldTeam = readSaved('vibetracker.team', null);
+  const accounts = oldTeam
+    ? oldTeam.map((member) => ({
+        name: member.name,
+        email: emailOf(member),
+        password: member.password ?? DEMO_PASSWORD,
+        colour: member.colour,
+      }))
+    : makeStartingAccounts();
+
+  // Sian and Ela own the two boards, so they need accounts even if they left the old team.
+  for (const starting of makeStartingAccounts().slice(0, 2)) {
+    if (!accounts.some((account) => account.email === starting.email)) {
+      accounts.push({ ...starting, colour: nextAvatarColour(accounts) });
+    }
+  }
+
+  const sian = seedEmail(TEAM[0]);
+  const ela = seedEmail(TEAM[1]);
+  const nameOf = (email) => accounts.find((account) => account.email === email).name;
+  const groupMembers = accounts
+    .filter((account) => account.email !== sian && oldTeamHas(oldTeam, account.email))
+    .map((account) => ({ email: account.email, role: 'member' }));
+
+  return {
+    accounts,
+    boards: [
+      {
+        id: 'group-project',
+        name: 'Group Project',
+        members: [{ email: sian, role: 'owner' }, ...groupMembers],
+        tasks: readSaved('vibetracker.tasks', null) ?? makeSeedTasks(),
+        anchors: readSaved('vibetracker.anchors', null) ?? ANCHORS,
+      },
+      {
+        id: 'elas-board',
+        name: "Ela's Board",
+        members: [
+          { email: ela, role: 'owner' },
+          { email: sian, role: 'member' },
+        ],
+        tasks: makeElasBoardTasks(nameOf(ela), nameOf(sian)),
+        anchors: ANCHORS,
+      },
+    ],
+  };
+}
+
+// True if the email was on the old team. With no old team, everyone on the starting team was.
+function oldTeamHas(oldTeam, email) {
+  return oldTeam ? oldTeam.some((member) => emailOf(member) === email) : true;
+}
+
+// A board's members with their account details, as { name, email, colour, role }.
+// This is the "team" the board, filters, Team panel and Stats panel work with.
+function boardTeam(board, accounts) {
+  return board.members.flatMap((member) => {
+    const account = accounts.find((saved) => saved.email === member.email);
+    return account ? [{ ...account, role: member.role }] : [];
+  });
+}
+
+// True if the text looks like an email: something, an @, then a dot somewhere after it.
+function looksLikeEmail(text) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+}
+
+// The account whose email and password match, or null.
+function findAccount(accounts, email, password) {
+  const typed = email.trim().toLowerCase();
+  const account = accounts.find((saved) => saved.email === typed);
+  return account && password === account.password ? account : null;
+}
+
+// Checks a new account from Sign up against the existing accounts.
+// Returns an error message for each field that is wrong, so {} means it is fine.
+// Names are unique too, because tasks store their owner by name.
+function accountErrors(accounts, { name, email, password }) {
+  const errors = {};
+  if (!name) errors.name = 'Please type a name.';
+  else if (accounts.some((account) => account.name.toLowerCase() === name.toLowerCase())) {
+    errors.name = `${name} is already taken. Try adding your surname.`;
+  }
+  if (!email) errors.email = 'Please type an email.';
+  else if (!looksLikeEmail(email)) errors.email = 'Enter an email like name@example.com.';
+  else if (accounts.some((account) => account.email === email.toLowerCase())) {
+    errors.email = 'This email is already registered.';
+  }
+  if (password.length < 8) errors.password = 'Password must be at least 8 characters.';
+  return errors;
 }
 
 // The colour for a new member: whichever colour fewest people already have.
@@ -469,6 +573,46 @@ function makeSeedTasks() {
   ];
 }
 
+// Example tasks for "Ela's Board", so it isn't empty when switching boards is shown.
+// Dates are relative to today, like the other seed tasks.
+function makeElasBoardTasks(ela, sian) {
+  return [
+    {
+      id: 'ela-seed-1',
+      title: 'Plan the poster layout',
+      description: 'Sketch where the title, screenshots and QR code go.',
+      type: 'feature',
+      status: 'todo',
+      assignee: ela,
+      dueDate: daysFromToday(6),
+      createdDate: daysFromToday(-1),
+      ...CONTEXT_DEFAULTS,
+    },
+    {
+      id: 'ela-seed-2',
+      title: 'Fix the blurry screenshots',
+      description: 'They look soft when the poster is printed at A1.',
+      type: 'bug',
+      status: 'in-progress',
+      assignee: sian,
+      dueDate: daysFromToday(1),
+      createdDate: daysFromToday(-2),
+      ...CONTEXT_DEFAULTS,
+    },
+    {
+      id: 'ela-seed-3',
+      title: 'Write the user survey questions',
+      description: 'Ten short questions about how the team hands off work.',
+      type: 'feature',
+      status: 'done',
+      assignee: ela,
+      dueDate: daysFromToday(-2),
+      createdDate: daysFromToday(-5),
+      ...CONTEXT_DEFAULTS,
+    },
+  ];
+}
+
 /**
  * A tiny localStorage hook — survives reloads, no library needed.
  *
@@ -479,10 +623,12 @@ export function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     try {
       const raw = window.localStorage.getItem(key);
-      return raw != null ? JSON.parse(raw) : initialValue;
+      if (raw != null) return JSON.parse(raw);
     } catch {
-      return initialValue;
+      /* fall through to the starting value */
     }
+    // A function is only called when nothing is saved, for starting values that take work.
+    return typeof initialValue === 'function' ? initialValue() : initialValue;
   });
 
   useEffect(() => {
@@ -569,17 +715,39 @@ function useFocusTrap(dialogRef) {
 export default function App() {
   const [theme, setTheme] = useTheme();
 
-  // The seed is only used when nothing is saved in the browser yet.
-  const [tasks, setTasks] = useLocalStorage('vibetracker.tasks', makeSeedTasks());
+  // Every account, and every board. On first load both come from makeStartingData(),
+  // which moves the old single board into "Group Project" so nothing is lost.
+  // Each board is { id, name, members: [{ email, role }], tasks, anchors }.
+  const [accounts, setAccounts] = useLocalStorage('vibetracker.accounts', () => makeStartingData().accounts);
+  const [boards, setBoards] = useLocalStorage('vibetracker.boards', () => makeStartingData().boards);
 
-  // The current team, as a list of { name, colour }.
-  const [team, setTeam] = useLocalStorage('vibetracker.team', makeStartingTeam());
+  // The email of whoever is logged in, or null. Saved, so a refresh keeps them logged in.
+  const [sessionEmail, setSessionEmail] = useLocalStorage('vibetracker.session', null);
+  const currentUser = accounts.find((account) => account.email === sessionEmail) ?? null;
 
-  // The name of whoever is logged in, or null. Saved, so a refresh keeps them logged in.
-  // If their account has since been removed, they count as logged out.
-  const [userName, setUserName] = useLocalStorage('vibetracker.user', null);
-  const currentUser = team.find((member) => member.name === userName) ?? null;
-  const isLeader = currentUser !== null && roleOf(currentUser) === 'leader';
+  // The last board each person had open, as { email: boardId }, so it opens again after
+  // logging in or a refresh.
+  const [lastBoards, setLastBoards] = useLocalStorage('vibetracker.lastBoard', {});
+
+  // The boards the logged-in person is on, and the open one: their last board if they are
+  // still on it, otherwise their first. null when they are on no boards.
+  const myBoards = currentUser
+    ? boards.filter((saved) => saved.members.some((member) => member.email === currentUser.email))
+    : [];
+  const board = myBoards.find((saved) => saved.id === lastBoards[sessionEmail]) ?? myBoards[0] ?? null;
+  const team = board ? boardTeam(board, accounts) : [];
+  const tasks = board?.tasks ?? [];
+  const anchors = board?.anchors ?? ANCHORS;
+  const isOwner = team.some((member) => member.email === sessionEmail && member.role === 'owner');
+
+  // Saves changes to the open board, e.g. updateBoard({ tasks: [...] }).
+  function updateBoard(changes) {
+    setBoards(boards.map((saved) => (saved.id === board.id ? { ...saved, ...changes } : saved)));
+  }
+
+  function setTasks(newTasks) {
+    updateBoard({ tasks: newTasks });
+  }
 
   // The task open in the modal, or null when the modal is closed.
   const [editing, setEditing] = useState(null);
@@ -590,6 +758,9 @@ export default function App() {
   // True while the Stats panel is open.
   const [showingStats, setShowingStats] = useState(false);
 
+  // True while the Create board panel is open.
+  const [creatingBoard, setCreatingBoard] = useState(false);
+
   // The current time, refreshed every minute so the due chips update on their own.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -597,26 +768,51 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // A new teammate gets a Team Member account with the demo password.
-  // Only the leader can add or remove people, and no one can remove themselves.
-  function addTeammate(name) {
-    if (!isLeader) return;
-    setTeam([
-      ...team,
-      { name, colour: nextAvatarColour(team), role: 'member', password: DEMO_PASSWORD },
+  // Sign up: creates an account only and logs them in. An Owner adds them to a board.
+  function signUp(name, email, password) {
+    const account = { name, email: email.toLowerCase(), password, colour: nextAvatarColour(accounts) };
+    setAccounts([...accounts, account]);
+    setSessionEmail(account.email);
+  }
+
+  function openBoard(id) {
+    setLastBoards({ ...lastBoards, [sessionEmail]: id });
+  }
+
+  // A new empty board, with the person who made it as its Owner. It opens straight away.
+  function createBoard(name) {
+    const id = crypto.randomUUID();
+    setBoards([
+      ...boards,
+      { id, name, members: [{ email: sessionEmail, role: 'owner' }], tasks: [], anchors: ANCHORS },
     ]);
+    openBoard(id);
+    setCreatingBoard(false);
+  }
+
+  // Only the Owner can add or remove people, and no one can remove themselves.
+  // The Team panel has already checked the email belongs to an account and the board has room.
+  function addTeammate(email) {
+    if (!isOwner) return;
+    updateBoard({ members: [...board.members, { email, role: 'member' }] });
   }
 
   function removeTeammate(name) {
-    if (!isLeader || name === userName) return;
-    setTeam(team.filter((member) => member.name !== name));
+    const member = team.find((teammate) => teammate.name === name);
+    if (!isOwner || !member || member.email === sessionEmail) return;
+    updateBoard({ members: board.members.filter((saved) => saved.email !== member.email) });
     // Their filter chip goes too, so it can't be left switched on with no way to turn it off.
     setFilters({ ...filters, people: filters.people.filter((person) => person !== name) });
   }
 
-  // The filter bar (M12). Not saved, so the board shows everything again after a reload.
+  // The filter bar (M12), one set per board, as { boardId: filters }. Not saved, so every
+  // board shows everything again after a reload.
   // people and tools are lists (empty = no filter). due is one DUE_FILTERS id, or null.
-  const [filters, setFilters] = useState(NO_FILTERS);
+  const [filtersByBoard, setFiltersByBoard] = useState({});
+  const filters = (board && filtersByBoard[board.id]) ?? NO_FILTERS;
+  function setFilters(newFilters) {
+    setFiltersByBoard({ ...filtersByBoard, [board.id]: newFilters });
+  }
   const filtering = isFiltering(filters);
   const visibleTasks = tasks.filter((task) => matchesFilters(task, filters, now));
 
@@ -704,38 +900,43 @@ export default function App() {
     }
   }
 
-  // The deliverable links (M11). Saved under their own key, so they never touch the tasks.
-  const [anchors, setAnchors] = useLocalStorage('vibetracker.anchors', ANCHORS);
-
-  // Sets one anchor's link. A url of null clears it. Only the leader can change links.
+  // Sets one of the open board's deliverable links (M11). A url of null clears it.
+  // Only the Owner can change links.
   function saveAnchorUrl(id, url) {
-    if (!isLeader) return;
-    setAnchors(
-      ANCHORS.map((anchor) => ({
+    if (!isOwner) return;
+    updateBoard({
+      anchors: ANCHORS.map((anchor) => ({
         ...anchor,
         url: anchor.id === id ? url : (anchors.find((saved) => saved.id === anchor.id)?.url ?? null),
-      }))
-    );
+      })),
+    });
   }
 
   // Back to the login screen, with nothing left open or filtered for the next person.
   function logOut() {
-    setUserName(null);
+    setSessionEmail(null);
     setEditing(null);
     setShowingTeam(false);
     setShowingStats(false);
-    setFilters(NO_FILTERS);
+    setCreatingBoard(false);
+    setFiltersByBoard({});
   }
 
   // No one logged in: the login screen instead of the board. This comes after all the
   // hooks above, because React needs every hook to run on every render.
   if (!currentUser) {
-    return <LoginScreen team={team} onLogIn={(member) => setUserName(member.name)} />;
+    return (
+      <LoginScreen
+        accounts={accounts}
+        onLogIn={(account) => setSessionEmail(account.email)}
+        onSignUp={signUp}
+      />
+    );
   }
 
   return (
     <div className="min-h-screen p-6">
-      <header className="mb-6 flex items-end justify-between">
+      <header className="mb-6 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-brand-primary dark:text-brand-primary-dark">
             Vibecoding Project Tracker
@@ -744,17 +945,28 @@ export default function App() {
             {/* Replace this line with your team name from PRD §11. */}
             Team starter
           </p>
+          {board && (
+            <BoardSwitcher
+              boards={myBoards}
+              board={board}
+              userEmail={sessionEmail}
+              onOpen={openBoard}
+              onCreate={() => setCreatingBoard(true)}
+            />
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Who is logged in. */}
+          {/* Who is logged in, and their role on the open board. */}
           <div className="flex items-center gap-2 pr-2">
-            <Avatar name={currentUser.name} team={team} />
+            <Avatar name={currentUser.name} team={accounts} />
             <span className="text-sm leading-tight">
               <span className="sr-only">Logged in as </span>
               <span className="block font-medium">{currentUser.name}</span>
-              <span className="block text-xs text-text-muted dark:text-text-muted-dark">
-                {ROLES[roleOf(currentUser)]}
-              </span>
+              {board && (
+                <span className="block text-xs text-text-muted dark:text-text-muted-dark">
+                  {ROLES[isOwner ? 'owner' : 'member']}
+                </span>
+              )}
             </span>
           </div>
           {/* Icon-only, so the label says what pressing it does and the tooltip shows the same words. */}
@@ -767,31 +979,35 @@ export default function App() {
           >
             <Icon className="h-5 w-5">{theme === 'dark' ? SUN_ICON : MOON_ICON}</Icon>
           </button>
-          <button
-            type="button"
-            onClick={() => setShowingStats(true)}
-            className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
-          >
-            <Icon>{CHART_ICON}</Icon>
-            Stats
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowingTeam(true)}
-            className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
-          >
-            <Icon>{USERS_ICON}</Icon>
-            Team ({team.length})
-          </button>
-          {/* The plus icon takes the place of the "+" in DESIGN.md's "+ Add task". */}
-          <button
-            type="button"
-            onClick={openNewTask}
-            className={`${primaryButtonClass} inline-flex items-center gap-1.5`}
-          >
-            <Icon>{PLUS_ICON}</Icon>
-            Add task
-          </button>
+          {board && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowingStats(true)}
+                className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
+              >
+                <Icon>{CHART_ICON}</Icon>
+                Stats
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowingTeam(true)}
+                className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
+              >
+                <Icon>{USERS_ICON}</Icon>
+                Team ({team.length})
+              </button>
+              {/* The plus icon takes the place of the "+" in DESIGN.md's "+ Add task". */}
+              <button
+                type="button"
+                onClick={openNewTask}
+                className={`${primaryButtonClass} inline-flex items-center gap-1.5`}
+              >
+                <Icon>{PLUS_ICON}</Icon>
+                Add task
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={logOut}
@@ -803,35 +1019,48 @@ export default function App() {
         </div>
       </header>
 
-      <AnchorBoard anchors={anchors} canEdit={isLeader} onSave={saveAnchorUrl} />
+      {!board && (
+        <NoBoards email={currentUser.email} onCreate={() => setCreatingBoard(true)} />
+      )}
 
-      <FilterBar
-        filters={filters}
-        team={team}
-        shown={visibleTasks.length}
-        total={tasks.length}
-        onChange={setFilters}
-      />
+      {board && (
+        <>
+          {/* A new key per board, so a half-typed deliverable link doesn't carry over to another board. */}
+          <AnchorBoard key={board.id} anchors={anchors} canEdit={isOwner} onSave={saveAnchorUrl} />
 
-      {/* A flex row instead of a grid, so open columns share the space a collapsed strip leaves. */}
-      <main className="flex gap-4">
-        {STAGES.map((stage) => (
-          <Column
-            key={stage.id}
-            label={stage.label}
-            tasks={visibleTasks.filter((task) => task.status === stage.id)}
-            collapsed={collapsedColumns.includes(stage.id)}
-            onToggleCollapsed={() => toggleColumn(stage.id)}
-            onDropTask={(id) => moveTask(id, stage.id)}
-            onMoveTask={moveTask}
-            filtering={filtering}
+          <FilterBar
+            filters={filters}
             team={team}
-            now={now}
-            onOpen={setEditing}
-            onCopy={copyContext}
+            shown={visibleTasks.length}
+            total={tasks.length}
+            onChange={setFilters}
           />
-        ))}
-      </main>
+
+          {/* A flex row instead of a grid, so open columns share the space a collapsed strip leaves. */}
+          <main className="flex gap-4">
+            {STAGES.map((stage) => (
+              <Column
+                key={stage.id}
+                label={stage.label}
+                tasks={visibleTasks.filter((task) => task.status === stage.id)}
+                collapsed={collapsedColumns.includes(stage.id)}
+                onToggleCollapsed={() => toggleColumn(stage.id)}
+                onDropTask={(id) => moveTask(id, stage.id)}
+                onMoveTask={moveTask}
+                filtering={filtering}
+                team={team}
+                now={now}
+                onOpen={setEditing}
+                onCopy={copyContext}
+              />
+            ))}
+          </main>
+        </>
+      )}
+
+      {creatingBoard && (
+        <CreateBoardModal onCreate={createBoard} onClose={() => setCreatingBoard(false)} />
+      )}
 
       {editing && (
         <TaskModal
@@ -853,7 +1082,8 @@ export default function App() {
         <TeamModal
           team={team}
           tasks={tasks}
-          canManage={isLeader}
+          accounts={accounts}
+          canManage={isOwner}
           currentUserName={currentUser.name}
           onAdd={addTeammate}
           onRemove={removeTeammate}
@@ -909,7 +1139,7 @@ const fieldClass =
 
 // The row of four deliverable cards above the board (M11).
 // It always shows the four ANCHORS in order, filling in any saved link by id.
-// Team Members can open the links but not change them, so they see a note once here instead.
+// Members can open the links but not change them, so they see a note once here instead.
 function AnchorBoard({ anchors, canEdit, onSave }) {
   return (
     <section aria-labelledby="anchor-board-heading" className="mb-4">
@@ -919,7 +1149,7 @@ function AnchorBoard({ anchors, canEdit, onSave }) {
         </h2>
         {!canEdit && (
           <p className="text-xs text-text-muted dark:text-text-muted-dark">
-            Only the team leader can edit deliverable links
+            Only the owner can edit deliverable links
           </p>
         )}
       </div>
@@ -943,7 +1173,7 @@ function AnchorBoard({ anchors, canEdit, onSave }) {
 // One deliverable card. With no link it shows an input and Save.
 // With a link it shows the link (opens in a new tab) plus Edit and Clear.
 // The dot is empty with no link and filled with one, and the hidden text says the same for screen readers.
-// Without `canEdit` (Team Members) there is no input, Edit or Clear, only the link or "No link yet".
+// Without `canEdit` (Members) there is no input, Edit or Clear, only the link or "No link yet".
 function AnchorCard({ anchor, canEdit, onSave }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -1326,17 +1556,53 @@ function TaskCard({ task, team, now, onOpen, onCopy, onMove }) {
 
 // The "Move to" button on a card and its menu of the other three columns, for anyone
 // who can't drag: keyboard, touch and screen reader users. Choosing one does the same as a drop.
-// Keys: Enter, Space or Down Arrow open it, the arrow keys, Home and End move between
-// the columns, Enter chooses one, and Esc or Tab closes it and goes back to the button.
 function MoveMenu({ task, onMove }) {
+  const buttonId = `move-button-${task.id}`;
+  return (
+    <MenuButton
+      buttonId={buttonId}
+      buttonClassName={cardActionClass}
+      buttonContent={
+        <>
+          <span className={cardPillClass}>
+            <Icon className="h-3 w-3">{MOVE_ICON}</Icon>
+            Move to
+          </span>
+          <span className="sr-only"> ({task.title})</span>
+        </>
+      }
+      menuLabel={`Move ${task.title} to`}
+      menuClassName="right-0 w-40"
+      items={STAGES.filter((stage) => stage.id !== task.status).map((stage) => ({
+        key: stage.id,
+        label: stage.label,
+        onSelect() {
+          onMove(stage.id);
+          // The card is drawn again in its new column, so focus follows it to its Move to button there.
+          // If that column is collapsed or filtered out, there is no button to go to.
+          setTimeout(() => document.getElementById(buttonId)?.focus());
+        },
+      }))}
+    />
+  );
+}
+
+// A button that opens a small menu (the "Move to" menu and the board switcher).
+// Keys: Enter, Space or Down Arrow open it (Up Arrow opens it on the last item), the arrow
+// keys, Home and End move between items, Enter chooses one, and Esc or Tab closes it and
+// goes back to the button. A press outside closes it too.
+// Each item is { key, label, onSelect }, plus `checked` for a menu of choices like the
+// boards (true on the one picked now), and `separatorBefore` to draw a line above it.
+// Choosing an item puts focus back on the button first, so a panel the item opens
+// returns focus there when it closes.
+function MenuButton({ buttonId, buttonClassName, buttonContent, menuLabel, menuClassName, items }) {
   const [open, setOpen] = useState(false);
-  // Which column to focus when the menu opens: 0 is the first, -1 the last (Up Arrow).
+  // Which item to focus when the menu opens: 0 is the first, -1 the last (Up Arrow).
   const [startAt, setStartAt] = useState(0);
   const wrapperRef = useRef(null);
   const buttonRef = useRef(null);
   const itemRefs = useRef([]);
-  const menuId = `move-menu-${task.id}`;
-  const targets = STAGES.filter((stage) => stage.id !== task.status);
+  const menuId = `${buttonId}-menu`;
 
   useEffect(() => {
     if (open) itemRefs.current.at(startAt)?.focus();
@@ -1391,58 +1657,192 @@ function MoveMenu({ task, onMove }) {
     }
   }
 
-  function choose(status) {
-    setOpen(false);
-    onMove(status);
-    // The card is drawn again in its new column, so focus follows it to its Move to button there.
-    // If that column is collapsed or filtered out, there is no button to go to.
-    setTimeout(() => document.getElementById(`move-button-${task.id}`)?.focus());
+  function choose(item) {
+    closeMenu();
+    item.onSelect();
   }
 
   return (
     <div ref={wrapperRef} className="relative">
       <button
         ref={buttonRef}
-        id={`move-button-${task.id}`}
+        id={buttonId}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => (open ? setOpen(false) : openMenu(0))}
         onKeyDown={handleButtonKeyDown}
-        className={cardActionClass}
+        className={buttonClassName}
       >
-        <span className={cardPillClass}>
-          <Icon className="h-3 w-3">{MOVE_ICON}</Icon>
-          Move to
-        </span>
-        <span className="sr-only"> ({task.title})</span>
+        {buttonContent}
       </button>
       {open && (
         <ul
           id={menuId}
           role="menu"
-          aria-label={`Move ${task.title} to`}
+          aria-label={menuLabel}
           onKeyDown={handleMenuKeyDown}
-          className="absolute right-0 z-10 w-40 rounded-md border border-border-subtle dark:border-border-subtle-dark bg-surface-card dark:bg-surface-card-dark py-1 shadow-lg"
+          className={`absolute z-10 rounded-md border border-border-subtle dark:border-border-subtle-dark bg-surface-card dark:bg-surface-card-dark py-1 shadow-lg ${menuClassName}`}
         >
-          {targets.map((stage, index) => (
-            <li key={stage.id} role="none">
-              <button
-                ref={(element) => (itemRefs.current[index] = element)}
-                type="button"
-                role="menuitem"
-                // Only the arrow keys move between the columns, so Tab doesn't stop on each one.
-                tabIndex={-1}
-                onClick={() => choose(stage.id)}
-                className="flex min-h-11 w-full items-center px-3 text-left text-sm hover:bg-brand-primary/10 focus:bg-brand-primary/10 dark:hover:bg-brand-primary-dark/10 dark:focus:bg-brand-primary-dark/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-primary dark:focus-visible:ring-brand-primary-dark"
-              >
-                {stage.label}
-              </button>
-            </li>
+          {items.map((item, index) => (
+            <Fragment key={item.key}>
+              {item.separatorBefore && (
+                <li role="separator" className="my-1 border-t border-border-subtle dark:border-border-subtle-dark" />
+              )}
+              <li role="none">
+                <button
+                  ref={(element) => (itemRefs.current[index] = element)}
+                  type="button"
+                  role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                  aria-checked={item.checked}
+                  // Only the arrow keys move between the items, so Tab doesn't stop on each one.
+                  tabIndex={-1}
+                  onClick={() => choose(item)}
+                  className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-brand-primary/10 focus:bg-brand-primary/10 dark:hover:bg-brand-primary-dark/10 dark:focus:bg-brand-primary-dark/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-primary dark:focus-visible:ring-brand-primary-dark"
+                >
+                  {/* A tick on the board that is open now, so it isn't shown by colour alone. */}
+                  {item.checked !== undefined && (
+                    <Icon className={`h-4 w-4 ${item.checked ? '' : 'invisible'}`}>{CHECK_ICON}</Icon>
+                  )}
+                  {item.label}
+                </button>
+              </li>
+            </Fragment>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// The board switcher in the header: the open board's name and the person's role on it.
+// The menu lists every board they are on, with their role, and "Create board" at the end.
+function BoardSwitcher({ boards, board, userEmail, onOpen, onCreate }) {
+  const roleOn = (saved) => ROLES[saved.members.find((member) => member.email === userEmail).role];
+  return (
+    <MenuButton
+      buttonId="board-switcher"
+      buttonClassName={`${secondaryButtonClass} mt-2 inline-flex max-w-xs items-center gap-1.5`}
+      buttonContent={
+        <>
+          <span className="sr-only">Board: </span>
+          <span className="truncate font-semibold">{board.name}</span>
+          <span className="shrink-0 text-text-muted dark:text-text-muted-dark">· {roleOn(board)}</span>
+          <Icon className="h-4 w-4">{CHEVRON_DOWN_ICON}</Icon>
+        </>
+      }
+      menuLabel="Your boards"
+      menuClassName="left-0 mt-1 w-max min-w-56 max-w-sm"
+      items={[
+        ...boards.map((saved) => ({
+          key: saved.id,
+          label: `${saved.name} · ${roleOn(saved)}`,
+          checked: saved.id === board.id,
+          onSelect: () => onOpen(saved.id),
+        })),
+        {
+          key: 'create',
+          label: 'Create board',
+          separatorBefore: true,
+          onSelect: onCreate,
+        },
+      ]}
+    />
+  );
+}
+
+// Shown in place of the board for someone who isn't on any boards yet.
+function NoBoards({ email, onCreate }) {
+  return (
+    <main className="mx-auto mt-16 flex max-w-md flex-col items-center gap-4 rounded-lg border border-border-subtle dark:border-border-subtle-dark bg-surface-card dark:bg-surface-card-dark p-8 text-center">
+      <h2 className="text-lg font-semibold">You're not on any boards yet</h2>
+      <p className="text-sm text-text-muted dark:text-text-muted-dark">
+        Create your own board, or ask a board's owner to add you with your email ({email}).
+      </p>
+      <button
+        type="button"
+        onClick={onCreate}
+        className={`${primaryButtonClass} inline-flex items-center gap-1.5`}
+      >
+        <Icon>{PLUS_ICON}</Icon>
+        Create board
+      </button>
+    </main>
+  );
+}
+
+// Asks for a new board's name. The person making it becomes its Owner.
+function CreateBoardModal({ onCreate, onClose }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  function handleSubmit(event) {
+    event.preventDefault(); // stop the browser reloading the page on form submit
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Please type a board name.');
+      return;
+    }
+    onCreate(trimmed);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-text-primary/50 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <form
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-board-heading"
+        onSubmit={handleSubmit}
+        noValidate
+        className="flex w-full max-w-md flex-col gap-4 rounded-lg border-t-8 border-t-brand-primary dark:border-t-brand-primary-dark bg-surface-card dark:bg-surface-card-dark p-6"
+      >
+        <h2 id="create-board-heading" className="text-lg font-semibold">
+          Create board
+        </h2>
+        <TextField
+          id="board-name"
+          label="Board name"
+          error={error}
+          type="text"
+          autoFocus
+          maxLength={60}
+          value={name}
+          onChange={(event) => {
+            setName(event.target.value);
+            setError('');
+          }}
+        />
+        <p className="text-sm text-text-muted dark:text-text-muted-dark">
+          You will be the owner. You can add members from the Team panel.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={secondaryButtonClass}>
+            Cancel
+          </button>
+          <button type="submit" className={`${primaryButtonClass} inline-flex items-center gap-1.5`}>
+            <Icon>{PLUS_ICON}</Icon>
+            Create
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -2364,17 +2764,21 @@ function TaskModal({ task, isNew, team, now, onSave, onHandOff, onCopy, onDelete
 
 // The Team panel: see who is on the team and how many open tasks each person has,
 // add someone, or remove someone after a confirm step. Changes save straight away.
-// Team Members (`canManage` false) only see the list and a note. The leader has no bin
-// next to their own name, so no one can remove themselves.
-function TeamModal({ team, tasks, canManage, currentUserName, onAdd, onRemove, onClose }) {
-  const [newName, setNewName] = useState('');
+// The open board's members. Members (`canManage` false) only see the list and a note.
+// The Owner adds people by the email of an existing account, and has no bin next to
+// their own name, so no one can remove themselves.
+function TeamModal({ team, tasks, accounts, canManage, currentUserName, onAdd, onRemove, onClose }) {
+  const [newEmail, setNewEmail] = useState('');
+  // The error for the email field, or ''.
+  const [addError, setAddError] = useState('');
+  // The message when someone can't be removed.
   const [error, setError] = useState('');
   // The name showing "Remove {name}?", or null.
   const [confirmingRemove, setConfirmingRemove] = useState(null);
   // After "Keep", the bin button comes back and focus goes back onto it.
   const [returnFocusTo, setReturnFocusTo] = useState(null);
-  // After a removal that row is gone, so focus moves to the name field.
-  const nameInputRef = useRef(null);
+  // After a removal that row is gone, so focus moves to the email field.
+  const emailInputRef = useRef(null);
 
   const dialogRef = useRef(null);
   useFocusTrap(dialogRef);
@@ -2390,21 +2794,18 @@ function TeamModal({ team, tasks, canManage, currentUserName, onAdd, onRemove, o
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [confirmingRemove, onClose]);
 
-  const isFull = team.length >= MAX_TEAM_SIZE;
-
   function handleAdd(event) {
     event.preventDefault(); // stop the browser reloading the page on form submit
-    const name = newName.trim();
-    if (!name) {
-      setError('Please type a name.');
-      return;
-    }
-    if (team.some((member) => member.name.toLowerCase() === name.toLowerCase())) {
-      setError(`${name} is already on the team.`);
-      return;
-    }
-    onAdd(name);
-    setNewName('');
+    const email = newEmail.trim().toLowerCase();
+    let problem = '';
+    if (!email) problem = 'Please type an email.';
+    else if (!accounts.some((account) => account.email === email)) problem = 'No account with that email';
+    else if (team.some((member) => member.email === email)) problem = 'Already on this board';
+    else if (team.length >= MAX_TEAM_SIZE) problem = `This board is full (${MAX_TEAM_SIZE} people)`;
+    setAddError(problem);
+    if (problem) return;
+    onAdd(email);
+    setNewEmail('');
     setError('');
   }
 
@@ -2426,13 +2827,13 @@ function TeamModal({ team, tasks, canManage, currentUserName, onAdd, onRemove, o
     setConfirmingRemove(name);
   }
 
-  // The name field only appears once the team is no longer full, so focus
-  // moves after the team has updated rather than straight away.
+  // Focus moves after the team has updated rather than straight away,
+  // once the removed person's row has gone.
   const justRemoved = useRef(false);
   useEffect(() => {
     if (!justRemoved.current) return;
     justRemoved.current = false;
-    nameInputRef.current?.focus();
+    emailInputRef.current?.focus();
   }, [team.length]);
 
   function confirmRemove() {
@@ -2459,6 +2860,8 @@ function TeamModal({ team, tasks, canManage, currentUserName, onAdd, onRemove, o
         aria-modal="true"
         aria-labelledby="team-modal-heading"
         onSubmit={handleAdd}
+        // Our own error messages instead of the browser's pop-ups (e.g. for the email field).
+        noValidate
         className="flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg border-t-8 border-t-brand-primary dark:border-t-brand-primary-dark bg-surface-card dark:bg-surface-card-dark p-6"
       >
         <h2 id="team-modal-heading" className="text-lg font-semibold">
@@ -2513,7 +2916,7 @@ function TeamModal({ team, tasks, canManage, currentUserName, onAdd, onRemove, o
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium">{member.name}</span>
                   <span className="block text-xs text-text-muted dark:text-text-muted-dark">
-                    {open} open {open === 1 ? 'task' : 'tasks'}
+                    {ROLES[member.role]} · {open} open {open === 1 ? 'task' : 'tasks'}
                   </span>
                 </span>
                 {canManage && member.name !== currentUserName && (
@@ -2541,31 +2944,32 @@ function TeamModal({ team, tasks, canManage, currentUserName, onAdd, onRemove, o
 
         {!canManage ? (
           <p className="text-sm text-text-muted dark:text-text-muted-dark">
-            Only the team leader can manage the team
-          </p>
-        ) : isFull ? (
-          <p className="text-sm text-text-muted dark:text-text-muted-dark">
-            The team is full ({MAX_TEAM_SIZE} people). Remove someone to add another.
+            Only the owner can manage the team
           </p>
         ) : (
-          <div className="flex items-end gap-2">
-            <label className="block flex-1 text-sm font-medium">
-              Add a teammate
-              <input
-                ref={nameInputRef}
-                type="text"
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <TextField
+                id="new-member-email"
+                label="Add a member by email"
+                error={addError}
+                inputRef={emailInputRef}
+                type="email"
                 autoFocus
-                maxLength={40}
-                value={newName}
+                value={newEmail}
                 onChange={(event) => {
-                  setNewName(event.target.value);
+                  setNewEmail(event.target.value);
+                  setAddError('');
                   setError('');
                 }}
-                placeholder="Full name"
-                className={fieldClass}
+                placeholder="name@example.com"
               />
-            </label>
-            <button type="submit" className={`${primaryButtonClass} inline-flex items-center gap-1.5`}>
+            </div>
+            {/* Lined up with the field, below its label. */}
+            <button
+              type="submit"
+              className={`${primaryButtonClass} mt-6 inline-flex items-center gap-1.5`}
+            >
               <Icon>{USER_PLUS_ICON}</Icon>
               Add
             </button>
@@ -2589,10 +2993,65 @@ function TeamModal({ team, tasks, canManage, currentUserName, onAdd, onRemove, o
   );
 }
 
-// The login screen (prototype login), shown instead of the board when no one is logged in.
-// The error doesn't say whether the name or the password was wrong.
-function LoginScreen({ team, onLogIn }) {
-  const [name, setName] = useState('');
+// A text field with a visible label, and its error message underneath (role="alert", so
+// screen readers read it out). Any other props, like type or value, go on the input.
+function TextField({ id, label, error, inputRef, ...inputProps }) {
+  const errorId = `${id}-error`;
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium">
+        {label}
+      </label>
+      <input
+        id={id}
+        ref={inputRef}
+        aria-invalid={error ? 'true' : 'false'}
+        aria-describedby={error ? errorId : undefined}
+        {...inputProps}
+        className={fieldClass}
+      />
+      {error && (
+        <span id={errorId} role="alert" className="mt-1 block text-xs text-type-bug dark:text-type-bug-dark">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Classes for "No account? Sign up" and "Already have an account? Log in". They are buttons,
+// as they switch the form rather than go to another page, but look like links.
+const switchLinkClass =
+  'min-h-11 rounded-md px-1 font-medium text-brand-accent dark:text-brand-accent-dark underline hover:text-brand-primary dark:hover:text-brand-primary-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary dark:focus-visible:ring-brand-primary-dark';
+
+// The screen shown instead of the board when no one is logged in (prototype login):
+// the Log in form, or the Sign up form.
+function LoginScreen({ accounts, onLogIn, onSignUp }) {
+  const [signingUp, setSigningUp] = useState(false);
+  return (
+    <main className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex w-full max-w-sm flex-col gap-4 rounded-lg border-t-8 border-t-brand-primary dark:border-t-brand-primary-dark bg-surface-card dark:bg-surface-card-dark p-6 shadow-sm">
+        <div>
+          <h1 className="text-2xl font-semibold text-brand-primary dark:text-brand-primary-dark">
+            Vibecoding Project Tracker
+          </h1>
+          <h2 className="text-sm text-text-muted dark:text-text-muted-dark">
+            {signingUp ? 'Sign up to make an account.' : 'Log in to see your boards.'}
+          </h2>
+        </div>
+        {signingUp ? (
+          <SignUpForm accounts={accounts} onSignUp={onSignUp} onSwitch={() => setSigningUp(false)} />
+        ) : (
+          <LogInForm accounts={accounts} onLogIn={onLogIn} onSwitch={() => setSigningUp(true)} />
+        )}
+      </div>
+    </main>
+  );
+}
+
+// Email and password. The error doesn't say whether the email or the password was wrong.
+function LogInForm({ accounts, onLogIn, onSwitch }) {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   // Goes up on every failed try. Used as the error's key, so the alert is put on the
@@ -2601,72 +3060,135 @@ function LoginScreen({ team, onLogIn }) {
 
   function handleSubmit(event) {
     event.preventDefault(); // stop the browser reloading the page on form submit
-    const member = findAccount(team, name, password);
-    if (!member) {
-      setError('Name or password is incorrect');
+    const account = findAccount(accounts, email, password);
+    if (!account) {
+      setError('Email or password is incorrect');
       setFailedTries(failedTries + 1);
       return;
     }
-    onLogIn(member);
+    onLogIn(account);
+  }
+
+  // The one error is about both fields, so both point at it.
+  const errorProps = {
+    'aria-invalid': error ? 'true' : 'false',
+    'aria-describedby': error ? 'login-error' : undefined,
+  };
+
+  return (
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <TextField
+        id="login-email"
+        label="Email"
+        type="email"
+        autoFocus
+        autoComplete="username"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        {...errorProps}
+      />
+      <TextField
+        id="login-password"
+        label="Password"
+        type="password"
+        autoComplete="current-password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        {...errorProps}
+      />
+      <button type="submit" className={primaryButtonClass}>
+        Log in
+      </button>
+      {error && (
+        <p
+          key={failedTries}
+          id="login-error"
+          role="alert"
+          className="rounded-md bg-due-overdue dark:bg-due-overdue-dark p-3 text-sm text-due-overdue-ink dark:text-due-overdue-ink-dark"
+        >
+          {error}
+        </p>
+      )}
+      <p className="text-sm">
+        No account?{' '}
+        <button type="button" onClick={onSwitch} className={switchLinkClass}>
+          Sign up
+        </button>
+      </p>
+      <p className="border-t border-border-subtle dark:border-border-subtle-dark pt-3 text-xs text-text-muted dark:text-text-muted-dark">
+        Demo accounts: sian@email.com / password, ela@email.com / password. Each owns one board and
+        is a member of the other.
+      </p>
+    </form>
+  );
+}
+
+// Name, email and password for a new account. It isn't on any boards until it makes one
+// or an Owner adds it. Each error shows under its field.
+function SignUpForm({ accounts, onSignUp, onSwitch }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  // { name, email, password } error messages.
+  const [errors, setErrors] = useState({});
+
+  function handleSubmit(event) {
+    event.preventDefault(); // stop the browser reloading the page on form submit
+    const found = accountErrors(accounts, { name: name.trim(), email: email.trim(), password });
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+    onSignUp(name.trim(), email.trim(), password);
+  }
+
+  // Typing in a field clears that field's error.
+  function change(setValue, field) {
+    return (event) => {
+      setValue(event.target.value);
+      setErrors({ ...errors, [field]: undefined });
+    };
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <form
-        onSubmit={handleSubmit}
-        noValidate
-        aria-labelledby="login-heading"
-        className="flex w-full max-w-sm flex-col gap-4 rounded-lg border-t-8 border-t-brand-primary dark:border-t-brand-primary-dark bg-surface-card dark:bg-surface-card-dark p-6 shadow-sm"
-      >
-        <div>
-          <h1 id="login-heading" className="text-2xl font-semibold text-brand-primary dark:text-brand-primary-dark">
-            Vibecoding Project Tracker
-          </h1>
-          <p className="text-sm text-text-muted dark:text-text-muted-dark">Log in to see the board.</p>
-        </div>
-        <label className="block text-sm font-medium">
-          Name
-          <input
-            type="text"
-            autoFocus
-            autoComplete="username"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            aria-invalid={error ? 'true' : 'false'}
-            aria-describedby={error ? 'login-error' : undefined}
-            className={fieldClass}
-          />
-        </label>
-        <label className="block text-sm font-medium">
-          Password
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            aria-invalid={error ? 'true' : 'false'}
-            aria-describedby={error ? 'login-error' : undefined}
-            className={fieldClass}
-          />
-        </label>
-        <button type="submit" className={primaryButtonClass}>
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <TextField
+        id="signup-name"
+        label="Name"
+        error={errors.name}
+        type="text"
+        autoFocus
+        autoComplete="name"
+        maxLength={40}
+        value={name}
+        onChange={change(setName, 'name')}
+      />
+      <TextField
+        id="signup-email"
+        label="Email"
+        error={errors.email}
+        type="email"
+        autoComplete="email"
+        value={email}
+        onChange={change(setEmail, 'email')}
+      />
+      <TextField
+        id="signup-password"
+        label="Password"
+        error={errors.password}
+        type="password"
+        autoComplete="new-password"
+        value={password}
+        onChange={change(setPassword, 'password')}
+      />
+      <button type="submit" className={primaryButtonClass}>
+        Sign up
+      </button>
+      <p className="text-sm">
+        Already have an account?{' '}
+        <button type="button" onClick={onSwitch} className={switchLinkClass}>
           Log in
         </button>
-        {error && (
-          <p
-            key={failedTries}
-            id="login-error"
-            role="alert"
-            className="rounded-md bg-due-overdue dark:bg-due-overdue-dark p-3 text-sm text-due-overdue-ink dark:text-due-overdue-ink-dark"
-          >
-            {error}
-          </p>
-        )}
-        <p className="border-t border-border-subtle dark:border-border-subtle-dark pt-3 text-xs text-text-muted dark:text-text-muted-dark">
-          Demo accounts: Sian / password (Team Leader), Ela / password (Team Member)
-        </p>
-      </form>
-    </main>
+      </p>
+    </form>
   );
 }
 
