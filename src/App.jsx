@@ -836,6 +836,9 @@ export default function App() {
   // True when the Deliverables row is collapsed. Saved like the columns, so it stays after a reload.
   const [deliverablesCollapsed, setDeliverablesCollapsed] = useLocalStorage('vibetracker.deliverablesCollapsed', false);
 
+  // True when the filter bar is collapsed. Saved the same way.
+  const [filtersCollapsed, setFiltersCollapsed] = useLocalStorage('vibetracker.filtersCollapsed', false);
+
   // Opens the modal with a blank task. It is only added to the board on Save.
   function openNewTask() {
     setEditing({
@@ -1047,6 +1050,8 @@ export default function App() {
             shown={visibleTasks.length}
             total={tasks.length}
             onChange={setFilters}
+            collapsed={filtersCollapsed}
+            onToggle={() => setFiltersCollapsed(!filtersCollapsed)}
           />
 
           {/* A flex row instead of a grid, so open columns share the space a collapsed strip leaves. */}
@@ -1961,7 +1966,9 @@ function DueKeyChips({ selected, onToggle }) {
 // tasks are showing. Each filter is a button that opens its options underneath, one at a time.
 // Each option is a toggle button, and a switched-on one gets a tick and a stronger
 // border as well as a tint, so it doesn't rely on colour alone.
-function FilterBar({ filters, team, shown, total, onChange }) {
+// The heading is also the collapse button. Collapsed, the filter buttons and options are
+// hidden, but "Showing X of Y" and how many options are on stay, so a hidden filter is never missed.
+function FilterBar({ filters, team, shown, total, onChange, collapsed, onToggle }) {
   // Which filter's options are open: 'person', 'type', 'due', 'tool', or null for none.
   const [open, setOpen] = useState(null);
 
@@ -1986,6 +1993,7 @@ function FilterBar({ filters, team, shown, total, onChange }) {
     { id: 'due', label: 'Due dates', active: filters.due.length },
     { id: 'tool', label: 'AI tool', active: filters.tools.length },
   ];
+  const activeCount = groups.reduce((sum, group) => sum + group.active, 0);
 
   return (
     <section
@@ -1993,14 +2001,30 @@ function FilterBar({ filters, team, shown, total, onChange }) {
       className="mb-4 rounded-md border border-border-subtle bg-surface-card px-3 py-2 dark:border-border-subtle-dark dark:bg-surface-card-dark"
     >
       <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1">
+        {/* A button inside the heading, so it can still be found by heading. */}
         <h2
           id="filter-heading"
-          className="flex items-center gap-2 text-sm font-semibold uppercase text-text-muted dark:text-text-muted-dark"
+          className="text-sm font-semibold uppercase text-text-muted dark:text-text-muted-dark"
         >
-          <Icon>{FILTER_ICON}</Icon>
-          Filters
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            aria-controls="filter-toggles filter-options"
+            title={collapsed ? 'Expand filters' : 'Collapse filters'}
+            onClick={onToggle}
+            className="-ml-2 inline-flex min-h-11 items-center gap-2 rounded-md px-2 font-semibold uppercase hover:bg-border-subtle dark:hover:bg-border-subtle-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary dark:focus-visible:ring-brand-primary-dark"
+          >
+            <Icon>{collapsed ? CHEVRON_RIGHT_ICON : CHEVRON_DOWN_ICON}</Icon>
+            <Icon>{FILTER_ICON}</Icon>
+            Filters
+          </button>
         </h2>
-        <div className="flex flex-wrap gap-1">
+        {collapsed && activeCount > 0 && (
+          <p className="text-sm font-semibold text-brand-primary dark:text-brand-primary-dark">
+            {activeCount} active
+          </p>
+        )}
+        <div id="filter-toggles" className={collapsed ? 'hidden' : 'flex flex-wrap gap-1'}>
           {groups.map((group, index) => (
             <FilterToggle
               key={group.id}
@@ -2018,7 +2042,7 @@ function FilterBar({ filters, team, shown, total, onChange }) {
           <p role="status" className="text-sm text-text-muted dark:text-text-muted-dark">
             Showing {shown} of {total} {total === 1 ? 'task' : 'tasks'}
           </p>
-          {isFiltering(filters) && (
+          {isFiltering(filters) && !collapsed && (
             <button type="button" onClick={clearFilters} className={smallButtonClass}>
               <Icon>{X_ICON}</Icon>
               Clear filters
@@ -2027,6 +2051,8 @@ function FilterBar({ filters, team, shown, total, onChange }) {
         </div>
       </div>
 
+      {/* The open filter's options. Kept while collapsed, so they come back as they were. */}
+      <div id="filter-options" className={collapsed ? 'hidden' : undefined}>
       {open === 'person' && (
         <FilterGroup id="filter-person" label="Person">
           {team.map((member) => (
@@ -2088,7 +2114,7 @@ function FilterBar({ filters, team, shown, total, onChange }) {
           ))}
         </FilterGroup>
       )}
-
+      </div>
     </section>
   );
 }
