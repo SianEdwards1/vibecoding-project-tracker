@@ -833,6 +833,9 @@ export default function App() {
     );
   }
 
+  // True when the Deliverables row is collapsed. Saved like the columns, so it stays after a reload.
+  const [deliverablesCollapsed, setDeliverablesCollapsed] = useLocalStorage('vibetracker.deliverablesCollapsed', false);
+
   // Opens the modal with a blank task. It is only added to the board on Save.
   function openNewTask() {
     setEditing({
@@ -1029,7 +1032,14 @@ export default function App() {
       {board && (
         <>
           {/* A new key per board, so a half-typed deliverable link doesn't carry over to another board. */}
-          <AnchorBoard key={board.id} anchors={anchors} canEdit={isOwner} onSave={saveAnchorUrl} />
+          <AnchorBoard
+            key={board.id}
+            anchors={anchors}
+            canEdit={isOwner}
+            onSave={saveAnchorUrl}
+            collapsed={deliverablesCollapsed}
+            onToggle={() => setDeliverablesCollapsed(!deliverablesCollapsed)}
+          />
 
           <FilterBar
             filters={filters}
@@ -1144,20 +1154,40 @@ const fieldClass =
 // The row of four deliverable cards above the board (M11).
 // It always shows the four ANCHORS in order, filling in any saved link by id.
 // Members can open the links but not change them, so they see a note once here instead.
-function AnchorBoard({ anchors, canEdit, onSave }) {
+// The heading is also the collapse button. Collapsed, the cards are hidden (not removed,
+// so a half-typed link is kept) and a short count shows instead.
+function AnchorBoard({ anchors, canEdit, onSave, collapsed, onToggle }) {
+  const linkCount = ANCHORS.filter((anchor) => anchors.find((saved) => saved.id === anchor.id)?.url).length;
+
   return (
     <section aria-labelledby="anchor-board-heading" className="mb-4">
       <div className="mb-1 flex flex-wrap items-baseline gap-x-3">
+        {/* A button inside the heading, so it can still be found by heading. */}
         <h2 id="anchor-board-heading" className="text-sm font-semibold uppercase text-text-muted dark:text-text-muted-dark">
-          Deliverables
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            aria-controls="anchor-board-cards"
+            title={collapsed ? 'Expand deliverables' : 'Collapse deliverables'}
+            onClick={onToggle}
+            className="-ml-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 font-semibold uppercase hover:bg-border-subtle dark:hover:bg-border-subtle-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary dark:focus-visible:ring-brand-primary-dark"
+          >
+            <Icon>{collapsed ? CHEVRON_RIGHT_ICON : CHEVRON_DOWN_ICON}</Icon>
+            Deliverables
+          </button>
         </h2>
+        {collapsed && (
+          <p className="text-xs text-text-muted dark:text-text-muted-dark">
+            {linkCount} of {ANCHORS.length} links added
+          </p>
+        )}
         {!canEdit && (
           <p className="text-xs text-text-muted dark:text-text-muted-dark">
             Only the owner can edit deliverable links
           </p>
         )}
       </div>
-      <div className="grid grid-cols-4 gap-4">
+      <div id="anchor-board-cards" className={collapsed ? 'hidden' : 'grid grid-cols-4 gap-4'}>
         {ANCHORS.map((anchor) => {
           const url = anchors.find((saved) => saved.id === anchor.id)?.url ?? null;
           return (
