@@ -1966,8 +1966,9 @@ function DueKeyChips({ selected, onToggle }) {
 // tasks are showing. Each filter is a button that opens its options underneath, one at a time.
 // Each option is a toggle button, and a switched-on one gets a tick and a stronger
 // border as well as a tint, so it doesn't rely on colour alone.
-// The heading is also the collapse button. Collapsed, the filter buttons and options are
-// hidden, but "Showing X of Y" and how many options are on stay, so a hidden filter is never missed.
+// Closed, it is one slim line: the "Filters" button (with how many options are on, so a
+// hidden filter is never missed) and "Showing X of Y". The panel is hidden, not removed,
+// so the open filter comes back as it was.
 function FilterBar({ filters, team, shown, total, onChange, collapsed, onToggle }) {
   // Which filter's options are open: 'person', 'type', 'due', 'tool', or null for none.
   const [open, setOpen] = useState(null);
@@ -1996,35 +1997,55 @@ function FilterBar({ filters, team, shown, total, onChange, collapsed, onToggle 
   const activeCount = groups.reduce((sum, group) => sum + group.active, 0);
 
   return (
-    <section
-      aria-labelledby="filter-heading"
-      className="mb-4 rounded-md border border-border-subtle bg-surface-card px-3 py-2 dark:border-border-subtle-dark dark:bg-surface-card-dark"
-    >
-      <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1">
-        {/* A button inside the heading, so it can still be found by heading. */}
-        <h2
-          id="filter-heading"
-          className="text-sm font-semibold uppercase text-text-muted dark:text-text-muted-dark"
-        >
+    <section aria-labelledby="filter-heading" className="mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-3">
+        {/* A button inside the heading, so it can still be found by heading. Styled like
+            the filter buttons: the outer part is the 44 px press area, the pill is what you see. */}
+        <h2 id="filter-heading" className="text-sm">
           <button
             type="button"
             aria-expanded={!collapsed}
-            aria-controls="filter-toggles filter-options"
-            title={collapsed ? 'Expand filters' : 'Collapse filters'}
+            aria-controls="filter-panel"
             onClick={onToggle}
-            className="-ml-2 inline-flex min-h-11 items-center gap-2 rounded-md px-2 font-semibold uppercase hover:bg-border-subtle dark:hover:bg-border-subtle-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary dark:focus-visible:ring-brand-primary-dark"
+            className={cardActionClass}
           >
-            <Icon>{collapsed ? CHEVRON_RIGHT_ICON : CHEVRON_DOWN_ICON}</Icon>
-            <Icon>{FILTER_ICON}</Icon>
-            Filters
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium group-focus-visible:ring-2 group-focus-visible:ring-brand-primary dark:group-focus-visible:ring-brand-primary-dark ${
+                activeCount > 0 || !collapsed
+                  ? 'border-brand-primary bg-brand-primary/10 dark:border-brand-primary-dark dark:bg-brand-primary-dark/10'
+                  : 'border-text-muted/70 group-hover:border-text-muted dark:border-text-muted-dark/70 dark:group-hover:border-text-muted-dark'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5">{FILTER_ICON}</Icon>
+              Filters
+              {activeCount > 0 && (
+                <span className="font-semibold">
+                  ({activeCount}
+                  <span className="sr-only"> on</span>)
+                </span>
+              )}
+              <Icon className={`h-3.5 w-3.5 transition-transform ${collapsed ? '' : 'rotate-180'}`}>
+                {CHEVRON_DOWN_ICON}
+              </Icon>
+            </span>
           </button>
         </h2>
-        {collapsed && activeCount > 0 && (
-          <p className="text-sm font-semibold text-brand-primary dark:text-brand-primary-dark">
-            {activeCount} active
-          </p>
-        )}
-        <div id="filter-toggles" className={collapsed ? 'hidden' : 'flex flex-wrap gap-1'}>
+        {/* Read out by screen readers whenever the number changes. */}
+        <p role="status" className="text-sm text-text-muted dark:text-text-muted-dark">
+          Showing {shown} of {total} {total === 1 ? 'task' : 'tasks'}
+        </p>
+      </div>
+
+      <div
+        id="filter-panel"
+        className={
+          collapsed
+            ? 'hidden'
+            : 'mt-1 rounded-md border border-border-subtle bg-surface-card px-3 py-2 dark:border-border-subtle-dark dark:bg-surface-card-dark'
+        }
+      >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex flex-wrap gap-1">
           {groups.map((group, index) => (
             <FilterToggle
               key={group.id}
@@ -2037,22 +2058,14 @@ function FilterBar({ filters, team, shown, total, onChange, collapsed, onToggle 
             />
           ))}
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          {/* Read out by screen readers whenever the number changes. */}
-          <p role="status" className="text-sm text-text-muted dark:text-text-muted-dark">
-            Showing {shown} of {total} {total === 1 ? 'task' : 'tasks'}
-          </p>
-          {isFiltering(filters) && !collapsed && (
-            <button type="button" onClick={clearFilters} className={smallButtonClass}>
-              <Icon>{X_ICON}</Icon>
-              Clear filters
-            </button>
-          )}
-        </div>
+        {isFiltering(filters) && (
+          <button type="button" onClick={clearFilters} className={`${smallButtonClass} ml-auto`}>
+            <Icon>{X_ICON}</Icon>
+            Clear filters
+          </button>
+        )}
       </div>
 
-      {/* The open filter's options. Kept while collapsed, so they come back as they were. */}
-      <div id="filter-options" className={collapsed ? 'hidden' : undefined}>
       {open === 'person' && (
         <FilterGroup id="filter-person" label="Person">
           {team.map((member) => (
