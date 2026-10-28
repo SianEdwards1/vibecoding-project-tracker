@@ -820,6 +820,8 @@ export default function App() {
     setFiltersByBoard({ ...filtersByBoard, [board.id]: newFilters });
   }
   const filtering = isFiltering(filters);
+  // How many filter options are on, shown on the Filters button.
+  const activeFilters = filters.people.length + filters.types.length + filters.due.length + filters.tools.length;
   const visibleTasks = tasks.filter((task) => matchesFilters(task, filters, now));
 
   // The STAGES ids of the collapsed columns (M12). Saved, so they stay collapsed after a reload.
@@ -948,12 +950,50 @@ export default function App() {
 
   return (
     <div className="min-h-screen p-6">
-      <header className="mb-6 flex items-end justify-between gap-4">
-        <div>
+      {/* Two rows: the app and who is logged in, then the open board and its actions.
+          Both wrap on narrow screens instead of scrolling sideways. */}
+      <header className="mb-6 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h1 className="text-2xl font-semibold text-brand-primary dark:text-brand-primary-dark">
             Vibecoding Project Tracker
           </h1>
-          {board && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Who is logged in, and their role on the open board. */}
+            <div className="flex items-center gap-2 pr-2">
+              <Avatar name={currentUser.name} team={accounts} />
+              <span className="text-sm leading-tight">
+                <span className="sr-only">Logged in as </span>
+                <span className="block font-medium">{currentUser.name}</span>
+                {board && (
+                  <span className="block text-xs text-text-muted dark:text-text-muted-dark">
+                    {ROLES[isOwner ? 'owner' : 'member']}
+                  </span>
+                )}
+              </span>
+            </div>
+            {/* Icon-only, so the label says what pressing it does and the tooltip shows the same words. */}
+            <button
+              type="button"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className={`${secondaryButtonClass} inline-flex w-11 items-center justify-center px-0`}
+            >
+              <Icon className="h-5 w-5">{theme === 'dark' ? SUN_ICON : MOON_ICON}</Icon>
+            </button>
+            <button
+              type="button"
+              onClick={logOut}
+              className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
+            >
+              <Icon>{LOG_OUT_ICON}</Icon>
+              Log out
+            </button>
+          </div>
+        </div>
+
+        {board && (
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <BoardSwitcher
               boards={myBoards}
               board={board}
@@ -961,34 +1001,31 @@ export default function App() {
               onOpen={openBoard}
               onCreate={() => setCreatingBoard(true)}
             />
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Who is logged in, and their role on the open board. */}
-          <div className="flex items-center gap-2 pr-2">
-            <Avatar name={currentUser.name} team={accounts} />
-            <span className="text-sm leading-tight">
-              <span className="sr-only">Logged in as </span>
-              <span className="block font-medium">{currentUser.name}</span>
-              {board && (
-                <span className="block text-xs text-text-muted dark:text-text-muted-dark">
-                  {ROLES[isOwner ? 'owner' : 'member']}
-                </span>
-              )}
-            </span>
-          </div>
-          {/* Icon-only, so the label says what pressing it does and the tooltip shows the same words. */}
-          <button
-            type="button"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            className={`${secondaryButtonClass} inline-flex w-11 items-center justify-center px-0`}
-          >
-            <Icon className="h-5 w-5">{theme === 'dark' ? SUN_ICON : MOON_ICON}</Icon>
-          </button>
-          {board && (
-            <>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* Only says something while filters hide tasks. It stays on the page when empty,
+                  so screen readers still read out each change. */}
+              <p role="status" className="text-sm text-text-muted dark:text-text-muted-dark">
+                {filtering && `Showing ${visibleTasks.length} of ${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`}
+              </p>
+              <button
+                type="button"
+                aria-expanded={!filtersCollapsed}
+                aria-controls="filter-panel"
+                onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+                className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
+              >
+                <Icon>{FILTER_ICON}</Icon>
+                Filters
+                {activeFilters > 0 && (
+                  <span className="font-semibold">
+                    ({activeFilters}
+                    <span className="sr-only"> on</span>)
+                  </span>
+                )}
+                <Icon className={`h-4 w-4 transition-transform ${filtersCollapsed ? '' : 'rotate-180'}`}>
+                  {CHEVRON_DOWN_ICON}
+                </Icon>
+              </button>
               <button
                 type="button"
                 onClick={() => setShowingStats(true)}
@@ -1015,17 +1052,9 @@ export default function App() {
                 <Icon>{PLUS_ICON}</Icon>
                 Add task
               </button>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={logOut}
-            className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
-          >
-            <Icon>{LOG_OUT_ICON}</Icon>
-            Log out
-          </button>
-        </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {!board && (
@@ -1034,6 +1063,9 @@ export default function App() {
 
       {board && (
         <>
+          {/* Opened and closed by the Filters button in the header. */}
+          <FilterBar filters={filters} team={team} onChange={setFilters} collapsed={filtersCollapsed} />
+
           {/* A new key per board, so a half-typed deliverable link doesn't carry over to another board. */}
           <AnchorBoard
             key={board.id}
@@ -1042,16 +1074,6 @@ export default function App() {
             onSave={saveAnchorUrl}
             collapsed={deliverablesCollapsed}
             onToggle={() => setDeliverablesCollapsed(!deliverablesCollapsed)}
-          />
-
-          <FilterBar
-            filters={filters}
-            team={team}
-            shown={visibleTasks.length}
-            total={tasks.length}
-            onChange={setFilters}
-            collapsed={filtersCollapsed}
-            onToggle={() => setFiltersCollapsed(!filtersCollapsed)}
           />
 
           {/* A flex row instead of a grid, so open columns share the space a collapsed strip leaves. */}
@@ -1767,7 +1789,7 @@ function BoardSwitcher({ boards, board, userEmail, onOpen, onCreate }) {
   return (
     <MenuButton
       buttonId="board-switcher"
-      buttonClassName={`${secondaryButtonClass} mt-2 inline-flex max-w-xs items-center gap-1.5`}
+      buttonClassName={`${secondaryButtonClass} inline-flex max-w-xs items-center gap-1.5`}
       buttonContent={
         <>
           <span className="sr-only">Board: </span>
@@ -1962,14 +1984,13 @@ function DueKeyChips({ selected, onToggle }) {
   );
 }
 
-// The filter bar above the board (M12): person, type, due dates and AI tool, and how many
-// tasks are showing. Each filter is a button that opens its options underneath, one at a time.
+// The filter options (M12): person, type, due dates and AI tool. The Filters button in the
+// header opens and closes them, and "Showing X of Y" is in the header too.
+// Each filter is a button that opens its options underneath, one at a time.
 // Each option is a toggle button, and a switched-on one gets a tick and a stronger
 // border as well as a tint, so it doesn't rely on colour alone.
-// Closed, it is one slim line: the "Filters" button (with how many options are on, so a
-// hidden filter is never missed) and "Showing X of Y". The panel is hidden, not removed,
-// so the open filter comes back as it was.
-function FilterBar({ filters, team, shown, total, onChange, collapsed, onToggle }) {
+// Closed, it is hidden, not removed, so the open filter comes back as it was.
+function FilterBar({ filters, team, onChange, collapsed }) {
   // Which filter's options are open: 'person', 'type', 'due', 'tool', or null for none.
   const [open, setOpen] = useState(null);
 
@@ -1994,56 +2015,17 @@ function FilterBar({ filters, team, shown, total, onChange, collapsed, onToggle 
     { id: 'due', label: 'Due dates', active: filters.due.length },
     { id: 'tool', label: 'AI tool', active: filters.tools.length },
   ];
-  const activeCount = groups.reduce((sum, group) => sum + group.active, 0);
 
   return (
-    <section aria-labelledby="filter-heading" className="mb-4">
-      <div className="flex flex-wrap items-center justify-between gap-x-3">
-        {/* A button inside the heading, so it can still be found by heading. Styled like
-            the filter buttons: the outer part is the 44 px press area, the pill is what you see. */}
-        <h2 id="filter-heading" className="text-sm">
-          <button
-            type="button"
-            aria-expanded={!collapsed}
-            aria-controls="filter-panel"
-            onClick={onToggle}
-            className={cardActionClass}
-          >
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium group-focus-visible:ring-2 group-focus-visible:ring-brand-primary dark:group-focus-visible:ring-brand-primary-dark ${
-                activeCount > 0 || !collapsed
-                  ? 'border-brand-primary bg-brand-primary/10 dark:border-brand-primary-dark dark:bg-brand-primary-dark/10'
-                  : 'border-text-muted/70 group-hover:border-text-muted dark:border-text-muted-dark/70 dark:group-hover:border-text-muted-dark'
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5">{FILTER_ICON}</Icon>
-              Filters
-              {activeCount > 0 && (
-                <span className="font-semibold">
-                  ({activeCount}
-                  <span className="sr-only"> on</span>)
-                </span>
-              )}
-              <Icon className={`h-3.5 w-3.5 transition-transform ${collapsed ? '' : 'rotate-180'}`}>
-                {CHEVRON_DOWN_ICON}
-              </Icon>
-            </span>
-          </button>
-        </h2>
-        {/* Read out by screen readers whenever the number changes. */}
-        <p role="status" className="text-sm text-text-muted dark:text-text-muted-dark">
-          Showing {shown} of {total} {total === 1 ? 'task' : 'tasks'}
-        </p>
-      </div>
-
-      <div
-        id="filter-panel"
-        className={
-          collapsed
-            ? 'hidden'
-            : 'mt-1 rounded-md border border-border-subtle bg-surface-card px-3 py-2 dark:border-border-subtle-dark dark:bg-surface-card-dark'
-        }
-      >
+    <section
+      id="filter-panel"
+      aria-label="Filters"
+      className={
+        collapsed
+          ? 'hidden'
+          : 'mb-4 rounded-md border border-border-subtle bg-surface-card px-3 py-2 dark:border-border-subtle-dark dark:bg-surface-card-dark'
+      }
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="flex flex-wrap gap-1">
           {groups.map((group, index) => (
@@ -2127,7 +2109,6 @@ function FilterBar({ filters, team, shown, total, onChange, collapsed, onToggle 
           ))}
         </FilterGroup>
       )}
-      </div>
     </section>
   );
 }
